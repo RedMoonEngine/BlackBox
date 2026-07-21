@@ -14,6 +14,8 @@ RELICS = {
               "desc": "Reroll de un mal resultado de azar por ronda."},
     "mascara": {"emoji": "🎭", "name": "Máscara de los Horrores",
                 "desc": "Los demás no ven tus fichas ni tu inventario."},
+    "muneca": {"emoji": "🪆", "name": "Muñeca Maldita",
+               "desc": "Se sienta a tu lado y vigila. En el turno de OTRO puede pegarle un susto y robarle una reliquia al azar."},
 }
 
 RELIC_IDS = list(RELICS.keys())

@@ -48,8 +48,12 @@ export class UI {
     this.targetOv = el("div", "target-ov hidden");
     this.fxBloodEl = el("div", "fx-blood");
     this.fxFlashEl = el("div", "fx-flash");
+    this.scareEl = el("div", "jumpscare hidden",
+      `<div class="scare-inner"><div class="scare-face">🪆</div>
+        <div class="scare-title">¡LA MUÑECA!</div><div class="scare-by"></div></div>`);
     this.tutOv = el("div", "tut-ov hidden", this._tutorialHTML());
-    document.body.append(this.casinoOv, this.ownerOv, this.targetOv, this.fxBloodEl, this.fxFlashEl, this.tutOv);
+    document.body.append(this.casinoOv, this.ownerOv, this.targetOv, this.fxBloodEl, this.fxFlashEl,
+      this.scareEl, this.tutOv);
     this.tutOv.addEventListener("click", (e) => {
       if (e.target === this.tutOv || e.target.id === "tut-close") this.tutOv.classList.add("hidden");
     });
@@ -152,24 +156,33 @@ export class UI {
 
   fxBlood() { const e = this.fxBloodEl; e.classList.remove("show"); void e.offsetWidth; e.classList.add("show"); }
   fxFlash() { const e = this.fxFlashEl; e.classList.remove("show"); void e.offsetWidth; e.classList.add("show"); }
+  jumpscare(msg) {
+    const e = this.scareEl;
+    e.querySelector(".scare-by").textContent =
+      msg && msg.byName ? "la muñeca de " + clean(msg.byName) + " te clavó los ojos" : "";
+    e.classList.remove("hidden", "show"); void e.offsetWidth; e.classList.add("show");
+    clearTimeout(this._scareT);
+    this._scareT = setTimeout(() => { e.classList.remove("show"); e.classList.add("hidden"); }, 1300);
+  }
 
   _tutorialHTML() {
     const row = (ic, t, d) => `<div class="tut-row"><span class="tut-ic">${svg(ic)}</span><div><b>${t}</b><br><span class="hint">${d}</span></div></div>`;
     return `<div class="tut-card">
       <h2>CÓMO SE JUEGA</h2>
       <p class="tut-intro">Están todos alrededor de una mesa. En el centro, la <b>BlackBox</b>: un casino con
-        voluntad propia. Sobreviví, juntá fichas y leé a tus amigos. <b>Gana el último en pie</b>
-        (o el de más fichas).</p>
+        voluntad propia. Sobreviví, juntá fichas y leé a tus amigos. <b>Gana el último en pie</b>; si se
+        llega al <b>límite de rondas</b> (lo ves arriba como RONDA n/máx), gana <b>el de más fichas</b>.</p>
 
       <h3>Cada ronda</h3>
       <ol class="tut-loop">
-        <li>${svg("chip")} <b>Apostás</b> al pozo <b>a ciegas</b> (todavía no sabés a qué vas a jugar).</li>
-        <li>La caja <b>gira su ruleta</b> y elige una actividad.</li>
-        <li>Se <b>juega</b> esa actividad y se reparten premios o castigos.</li>
+        <li>${svg("chip")} <b>Apostás a ciegas</b>: lo que pongas va al <b>POZO</b> (todavía no sabés a qué van a jugar).</li>
+        <li>La caja <b>gira su ruleta</b> y elige la actividad.</li>
+        <li>Se <b>juega</b>: hay premios y castigos, y alguien puede quedar eliminado.</li>
+        <li>${svg("chip")} <b>Así se gana la apuesta:</b> al terminar la ronda, el pozo se <b>reparte en partes iguales entre los que sigan VIVOS</b>. Si te eliminan, perdés lo que apostaste. En la <b>ruleta rusa</b> el pozo se lo llevan los que se animaron a disparar y sobrevivieron.</li>
       </ol>
 
       <h3>Las actividades</h3>
-      ${row("box", "OBJETOS", "Te llega un objeto: <b>abrilo</b> (¿bomba?), <b>guardalo</b> para después, o <b>empujáselo</b> a otro… y mentí.")}
+      ${row("box", "OBJETOS", "Te llega un objeto <b>CERRADO</b>: nadie sabe qué es. <b>Abrilo</b> y arriesgate, o <b>pasáselo</b> a otro y que arriesgue él (podés mentir: 'tomá, un regalo'). Al abrir: si es <b>trampa</b> (bomba, maldición) te pega a vos; si es un <b>premio</b> cobrás fichas; si es una <b>herramienta</b> va a tu inventario para usarla cuando quieras.")}
       ${row("slot", "TRAGAPERRAS", "<b>Tirá la palanca</b> arrastrándola con el mouse. Combiná símbolos para ganar fichas, objetos o reliquias.")}
       ${row("revolver", "RULETA RUSA", "<b>Hacé click en el gatillo</b> para arriesgar por más premio… o <b>plantate</b> y cobrá lo seguro.")}
       ${row("film", "EVENTO", "Pasa cualquier cosa: lluvia de fichas, un monstruo, una subasta… hasta aparece <b>El Dueño</b>.")}
@@ -181,7 +194,7 @@ export class UI {
       ${row("whisky", "Inventario", "Objetos que <b>usás cuando querés</b> (bomba, whisky, imán, jeringa…). <b>Tocá un objeto</b> para usarlo; algunos piden objetivo.")}
       ${row("eye", "Reliquias", "Pasivas <b>permanentes</b> que cambian las reglas a tu favor.")}
 
-      <p class="tut-warn">${svg("warning")} El <b>teléfono</b> puede mentir. La caja <b>aprende</b>: cuanto más agresivos juegan todos, peor se pone. La gracia no es la puntería: es <b>leer, mentir y arriesgar</b>.</p>
+      <p class="tut-warn">${svg("warning")} El <b>teléfono</b> puede mentir. La caja <b>aprende</b>: cuanto más agresivos juegan todos, peor se pone. 🪆 Ojo con la <b>Muñeca Maldita</b>: se sienta al lado de su dueño, vigila el turno de cada uno y a veces te pega un <b>susto</b> y te <b>roba una reliquia</b>. La gracia no es la puntería: es <b>leer, mentir y arriesgar</b>.</p>
       <button class="big" id="tut-close">ENTENDIDO</button>
     </div>`;
   }
@@ -200,7 +213,7 @@ export class UI {
     const hearts = y.alive ? svg("heart").repeat(y.hp) || "—" : svg("skull");
     tb.innerHTML =
       `<div class="tb-left">
-        <span class="pill">RONDA <b>${state.round}</b></span>
+        <span class="pill">RONDA <b>${state.round}${state.roundCap ? "/" + state.roundCap : ""}</b></span>
         <span class="pill act">${actLabel(state.activity)}</span>
         <span class="pill corrupt">CASINO <b>${"▮".repeat(Math.min(8, state.menace)) || "○"}</b></span>
         <span class="pill">POZO ${chip(state.pot)}</span>
@@ -283,15 +296,16 @@ export class UI {
     switch (p) {
       case "BET":
         return y.ready
-          ? { t: "APUESTA LISTA ✓", s: "esperando a que el resto confirme…", k: "wait" }
-          : { t: "APOSTÁ A CIEGAS", s: "elegí cuántas fichas arriesgás — todavía no sabés a qué van a jugar", k: "mine" };
+          ? { t: "APUESTA LISTA ✓", s: "esperando a que el resto confirme… el pozo se reparte entre los que SOBREVIVAN la ronda", k: "wait" }
+          : { t: "APOSTÁ A CIEGAS", s: "todo lo apostado va al POZO; al final de la ronda se reparte entre los que SIGAN VIVOS. Si morís, lo perdés", k: "mine" };
       case "SPIN":
         return { t: "LA CAJA ELIGE…", s: "la ruleta decide la actividad de esta ronda", k: "wait" };
       case "OBJETOS": {
         const c = state.current;
         if (c && c.holderSeat === y.seat)
-          return { t: "TE LLEGÓ UN OBJETO", s: (c.danger ? "abrilo (¿bomba?), guardalo" : "guardalo") + " o empujáselo a otro… y mentí", k: "mine" };
-        return { t: "OBJETO EN JUEGO", s: `${this._seatName(state, c && c.holderSeat)} decide qué hacer con lo que le tocó…`, k: "wait" };
+          return { t: "OBJETO CERRADO EN TUS MANOS",
+            s: "no sabés si es un PREMIO o una TRAMPA. Abrilo y arriesgate, o pasáselo a alguien y que se coma el riesgo", k: "mine" };
+        return { t: "OBJETO CERRADO EN JUEGO", s: `${this._seatName(state, c && c.holderSeat)} decide si lo abre o te lo pasa…`, k: "wait" };
       }
       case "SLOTS":
         return y.canSpin
@@ -354,7 +368,7 @@ export class UI {
       // construir una sola vez por ronda (así el slider no se reinicia en cada broadcast)
       this.betPanel.innerHTML =
         `<div class="bet-title">APOSTÁ ${svg("chip")} A CIEGAS</div>
-         <div class="bet-sub">no sabés qué actividad va a salir…</div>
+         <div class="bet-sub">va todo al POZO → al terminar la ronda se reparte entre los SOBREVIVIENTES. Si te eliminan, lo perdés.</div>
          <div class="bet-display"><span class="bet-num" id="bet-amt">${this.myBet}</span>
            <span class="bet-cap">/ ${cap}</span></div>
          <input type="range" id="bet-range" class="bet-range" min="0" max="${cap}" value="${this.myBet}">
@@ -404,23 +418,21 @@ export class UI {
   // ---------------- OBJETOS ----------------
   _renderObjeto(state) {
     const cur = state.current;
-    const key = cur.holderSeat + ":" + cur.face.type + ":" + cur.danger + ":" + cur.pushesLeft;
+    const key = cur.holderSeat + ":" + cur.pushesLeft + ":" + cur.itemsLeft;
     if (key === this._objKey && $("action-btns").children.length) return;
     this._objKey = key;
-    const face = cur.face;
     $("held-info").innerHTML =
-      `<span class="big-emo">${iconEmoji(face.emoji)}</span>` +
-      `Te llegó: <b>${face.name}</b>` +
-      `<span class="sub">${cur.danger ? "peligroso — abrilo (¿bomba?) o pasalo" : "guardalo para usarlo… o pasalo"}</span>`;
+      `<span class="big-emo">${svg("question")}</span>` +
+      `Te llegó un <b>OBJETO CERRADO</b>` +
+      `<span class="sub">no sabés si es un <b>premio</b> o una <b>trampa</b>. Abrilo y arriesgate… o pasáselo a alguien (y que se lo coma él).</span>`;
     const btns = $("action-btns"); btns.innerHTML = "";
     const mk = (label, cls, fn) => {
       const b = el("button", "big " + cls, label);
       b.onclick = () => { this.audio.sfx("click"); fn(); };
       btns.appendChild(b);
     };
-    if (cur.danger) mk("ABRIR", "open", () => this.net.objOpen());
-    else mk("GUARDAR", "open", () => this.net.objPocket());
-    if (cur.pushesLeft > 0) mk("EMPUJAR ▸", "", () => $("push-picker").classList.toggle("hidden"));
+    mk("ABRIR", "open", () => this.net.objOpen());
+    if (cur.pushesLeft > 0) mk(`PASAR ▸ (${cur.pushesLeft})`, "", () => $("push-picker").classList.toggle("hidden"));
     const pp = $("push-picker"); pp.classList.add("hidden"); pp.innerHTML = "";
     for (const s of state.seats) {
       if (s.seat === this.mySeat || !s.alive || !s.connected) continue;
@@ -434,8 +446,8 @@ export class UI {
     const cur = state.current;
     const h = state.seats.find((s) => s.seat === cur.holderSeat);
     $("spectate").innerHTML =
-      `<span class="who">P${cur.holderSeat} ${h ? h.name : ""}</span> tiene ${iconEmoji(cur.face.emoji)} ${cur.face.name}… ` +
-      `<span class="hint">(${cur.pushesLeft} empujes)</span>`;
+      `<span class="who">P${cur.holderSeat} ${h ? h.name : ""}</span> tiene un <b>objeto sin abrir</b> ${svg("question")}… ` +
+      `<span class="hint">(${cur.pushesLeft} pases)</span>`;
   }
 
   // ---------------- SLOTS ----------------

@@ -52,14 +52,18 @@ def build_state(room, viewer):
             # ids para dibujar sus reliquias en 3D: las propias siempre; las ajenas
             # solo si el que mira "ve todo" (reliquia Ojo del Vidente)
             "relicIds": list(p.relics) if (p.seat == viewer.seat or sees_all) else [],
+            # la Muñeca Maldita es un objeto FÍSICO en la mesa: todos ven de quién es.
+            "hasDoll": relics.has(p, "muneca"),
             "isHolder": bool(cur and cur["holder_seat"] == p.seat)
                         or bool(room.roulette and room.roulette.get("holder_seat") == p.seat),
         })
 
     current = None
     if cur:
-        current = {"holderSeat": cur["holder_seat"], "face": _face(cur["otype"]),
-                   "danger": cur["danger"], "pushesLeft": cur["pushes_left"],
+        # objeto CERRADO: nadie ve qué es hasta que alguien lo ABRE (se revela al resolver).
+        current = {"holderSeat": cur["holder_seat"],
+                   "face": {"type": "?", "emoji": "❔", "name": "Objeto sin abrir"},
+                   "blind": True, "pushesLeft": cur["pushes_left"],
                    "timerMs": _ms(cur.get("timer_end")), "itemsLeft": cur["items_left"]}
 
     slots = None
@@ -101,6 +105,7 @@ def build_state(room, viewer):
 
     return {
         "t": "state", "code": room.code, "phase": room.phase, "round": room.round,
+        "roundCap": getattr(room, "round_cap", None),
         "menace": room.box.menace if room.box else 0, "pot": room.pot, "betCap": room.bet_cap,
         "betTimerMs": _ms(getattr(room, "bet_end", None)) if room.phase == "BET" else None,
         "hostSeat": room.host_seat, "started": room.started, "activity": room.activity,

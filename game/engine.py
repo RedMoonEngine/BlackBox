@@ -81,6 +81,7 @@ class GameLoop:
     def start_game(self, seed=None):
         self.box = ai_box.BoxAI(seed)
         self.started = True
+        self.round_cap = ROUND_CAP
         self.round = 0
         self.pot = 0
         self.activity = None
@@ -238,6 +239,7 @@ class GameLoop:
                 break
             self.current["holder_seat"] = holder_seat
             self.current["timer_end"] = time.time() + CHOOSE_SECS
+            self._doll_watch(holder_seat)
             await self.broadcast()
             action = await self.wait_decision(holder_seat, CHOOSE_SECS)
             kind = action.get("kind")
@@ -245,19 +247,13 @@ class GameLoop:
                 tp = self.players.get(action.get("targetSeat"))
                 if tp and tp.alive and tp.connected and tp.seat != holder_seat:
                     self.box.record("pushTo")
-                    self.add_log(f"{holder.name} le empujó {items.name(otype)} a {tp.name}.")
+                    # objeto CERRADO: el log NO revela qué era (blind)
+                    self.add_log(f"{holder.name} le pasó el objeto cerrado a {tp.name}.")
                     holder_seat = tp.seat
                     self.current["pushes_left"] -= 1
                     continue
                 continue
-            if kind == "pocket" and not danger:
-                if self._give(holder, otype):
-                    self.box.record("pocket")
-                    self.add_log(f"{holder.name} guardó {items.name(otype)} {items.emoji(otype)}.")
-                self.current = None
-                await self.broadcast()
-                return
-            # open / timeout
+            # abrir / timeout -> se resuelve en la cara del que lo tiene
             self.box.record("open")
             break
         self.phase = "OBJETOS"
@@ -374,16 +370,13 @@ class GameLoop:
                 return {"kind": "stop"}
             return {"kind": "pull"}
         if self.phase == "OBJETOS" and self.current:
-            danger = self.current.get("danger")
+            # los bots también juegan A CIEGAS: no saben si es trampa o premio.
+            # Deciden por miedo: más casino despierto o menos vida -> más pasan.
             pushes = self.current.get("pushes_left", 0)
             others = [s for s in self.alive_seats() if s != bot.seat]
-            if danger and pushes > 0 and others:
-                # más probable empujar si hay muchos a quienes pasar la papa caliente
-                if rng.random() < 0.4 + 0.12 * min(5, len(others)):
-                    return {"kind": "pushTo", "targetSeat": rng.choice(others)}
-                return {"kind": "open"}
-            if not danger and rng.random() < 0.7:
-                return {"kind": "pocket"}
+            fear = 0.26 + self.box.menace * 0.03 + (0.22 if bot.hp <= 1 else 0.0)
+            if pushes > 0 and others and rng.random() < min(0.7, fear):
+                return {"kind": "pushTo", "targetSeat": rng.choice(others)}
             return {"kind": "open"}
         return {"kind": "stop"}
 
@@ -500,6 +493,7 @@ class GameLoop:
                 stopped.add(seat); idx += 1; continue
             self.roulette.update({"holder_seat": seat, "chambers": chambers,
                                  "reward": brave, "timer_end": time.time() + ROULETTE_SECS})
+            self._doll_watch(seat)
             await self.broadcast()
             action = await self.wait_decision(seat, ROULETTE_SECS)
             kind = action.get("kind")
@@ -820,6 +814,38 @@ class GameLoop:
     def _give_relic(self, player, rid):
         if rid not in player.relics:
             player.relics.append(rid)
+
+    # ------------- MUÑECA MALDITA -------------
+    def _doll_watch(self, current_seat):
+        """En el turno de current_seat, cualquier OTRO dueño de la Muñeca puede,
+        al azar, asustarlo (jumpscare) y robarle una reliquia al azar."""
+        if not self.box:
+            return
+        rng = self.box.rng
+        victim = self.players.get(current_seat)
+        if not victim or not victim.alive:
+            return
+        for owner in self.alive_players():
+            if owner.seat == current_seat or not relics.has(owner, "muneca"):
+                continue
+            if rng.random() >= 0.15:      # ~15% por turno y por muñeca
+                continue
+            stealable = [r for r in victim.relics if r != "muneca"]
+            stolen = None
+            if stealable:
+                stolen = rng.choice(stealable)
+                victim.relics.remove(stolen)
+                self._give_relic(owner, stolen)
+            if victim.conn and not victim.conn.closed:
+                asyncio.create_task(victim.conn.send(
+                    {"t": "jumpscare", "by": owner.seat, "byName": owner.name}))
+            if stolen:
+                m = relics.meta(stolen)
+                self.add_log(f"🪆 La Muñeca de {owner.name} asustó a {victim.name} y le arrebató "
+                             f"{m['name']} {m['emoji']}.")
+            else:
+                self.add_log(f"🪆 La Muñeca de {owner.name} clavó los ojos en {victim.name}. Un escalofrío.")
+            break   # una sola muñeca actúa por turno
 
     def apply_result(self, res):
         for seat, d in res.get("hpDelta", {}).items():

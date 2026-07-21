@@ -367,6 +367,19 @@ body.glitching #crt{opacity:.9;animation:none;background:repeating-linear-gradie
 .fx-flash.show{animation:flashfx .45s ease-out}
 @keyframes flashfx{0%{opacity:0}7%{opacity:.9}100%{opacity:0}}
 
+/* ============ jumpscare de la Muñeca Maldita ============ */
+.jumpscare{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;background:radial-gradient(circle at 50% 45%,#5a0000,#000 72%);opacity:0}
+.jumpscare.show{animation:scarefx 1.3s ease-out forwards}
+@keyframes scarefx{0%{opacity:0}4%{opacity:1}72%{opacity:1}100%{opacity:0}}
+.scare-inner{text-align:center;animation:scareShake .08s steps(2) infinite}
+.scare-face{font-size:34vh;line-height:1;filter:drop-shadow(0 0 26px #f00) saturate(1.5)}
+.scare-title{font-size:2.4rem;letter-spacing:.22em;color:#ff2a1a;font-weight:bold;
+  text-shadow:0 0 20px #000,0 0 10px #f00}
+.scare-by{color:var(--amber);letter-spacing:.08em;margin-top:6px;font-size:.9rem;text-transform:uppercase}
+@keyframes scareShake{0%{transform:translate(-13px,7px) scale(1.02)}
+  50%{transform:translate(11px,-9px) scale(1.07)}100%{transform:translate(-7px,11px) scale(1.0)}}
+
 @media (max-width:560px){
   .logo{font-size:1.5rem}
   .log{width:44vw;font-size:.64rem}

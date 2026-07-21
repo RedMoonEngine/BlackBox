@@ -450,6 +450,90 @@ export function makeRelic(id) {
   return g;
 }
 
+// ---- caja misteriosa (objeto CERRADO de la fase OBJETOS) -----------------
+// Un "regalo" oscuro con moño rojo y signos de pregunta: no sabés si adentro
+// hay un premio o una bomba.
+export function makeMysteryBox() {
+  const g = new THREE.Group();
+  const box = _box(0.5, 0.5, 0.5, 0x241018); box.position.y = 0; g.add(box);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry),
+    new THREE.LineBasicMaterial({ color: 0xe8b04b })); g.add(edges);
+  // cintas / moño emisivo
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.53, 0.1, 0.53), emat(0xd94b3a)));
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.53, 0.53), emat(0xd94b3a)));
+  const knot = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), emat(0xe8b04b));
+  knot.position.y = 0.27; g.add(knot);
+  // signos de pregunta en las 4 caras
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const x = c.getContext("2d");
+  x.fillStyle = "#f0c85a";
+  x.font = "bold 54px 'Courier New',monospace"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText("?", 32, 38);
+  const qtex = new THREE.CanvasTexture(c); qtex.colorSpace = THREE.SRGBColorSpace;
+  const qmat = new THREE.MeshBasicMaterial({ map: qtex, transparent: true, toneMapped: false });
+  for (const ry of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+    const q = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), qmat);
+    q.position.set(Math.sin(ry) * 0.26, 0, Math.cos(ry) * 0.26); q.rotation.y = ry; g.add(q);
+  }
+  return g;
+}
+
+// ---- Muñeca Maldita (reliquia): muñeca de porcelana con cabeza controlable ---
+// El GLB del usuario está riggeado de un modo que no escala/renderiza fiable en
+// el motor y perdió el nombre del hueso; esta versión procedural permite que la
+// CABEZA siga con la mirada al jugador de turno de forma perfecta. Devuelve
+// {group, head}: rotá `head` para que mire a alguien.
+export function makeDoll() {
+  const g = new THREE.Group();
+  // auto-brillo alto: la muñeca debe leerse como presencia pálida en la penumbra
+  const porcelain = mat(0xe6d8c4, { emissive: 0x8a7458 });
+  const dress = mat(0x6a0c1a, { emissive: 0x45101a });
+  const dark = mat(0x160c14, { emissive: 0x0c060a });
+  // vestido (falda cónica) + torso
+  const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.23, 0.42, 12), dress);
+  skirt.position.y = 0.21; g.add(skirt);
+  const torso = _cyl(0.1, 0.14, 0.18, 10, 0x6c0c1a); torso.position.y = 0.45; g.add(torso);
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 6, 12), dark);
+  collar.rotation.x = Math.PI / 2; collar.position.y = 0.54; g.add(collar);
+  // bracitos colgando
+  for (const s of [-1, 1]) {
+    const arm = _cyl(0.032, 0.028, 0.22, 6, 0xe6d8c4); arm.position.set(s * 0.14, 0.42, 0);
+    arm.rotation.z = s * 0.22; g.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5), porcelain);
+    hand.position.set(s * 0.17, 0.31, 0); g.add(hand);
+  }
+  // piernitas
+  for (const s of [-1, 1]) {
+    const leg = _cyl(0.038, 0.032, 0.14, 6, 0xe6d8c4); leg.position.set(s * 0.07, 0.06, 0.04); g.add(leg);
+    const shoe = _box(0.06, 0.04, 0.09, 0x140a12); shoe.position.set(s * 0.07, 0.0, 0.06); g.add(shoe);
+  }
+  // ---- cabeza (grupo que rota para "mirar"): la cara mira a +Z ----
+  const head = new THREE.Group(); head.position.y = 0.64; g.add(head);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), porcelain);
+  skull.scale.set(1, 1.05, 0.95); head.add(skull);
+  // pelo (media esfera oscura)
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.165, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), dark);
+  hair.position.y = 0.02; head.add(hair);
+  const bang = new THREE.Mesh(new THREE.SphereGeometry(0.155, 12, 8, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.2), dark);
+  bang.position.set(0, 0.03, 0.02); head.add(bang);
+  // ojos negros con brillo rojo (miran +Z)
+  for (const s of [-1, 1]) {
+    const socket = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 7), emat(0x080606));
+    socket.position.set(s * 0.06, -0.01, 0.125); head.add(socket);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 5), emat(0xe23a2a));
+    glint.position.set(s * 0.062, 0.0, 0.16); head.add(glint);
+  }
+  // grieta + boca cosida
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.012, 0.01), emat(0x6a1010));
+  mouth.position.set(0, -0.08, 0.14); head.add(mouth);
+  for (let i = -2; i <= 2; i++) {
+    const st = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.03, 0.01), dark);
+    st.position.set(i * 0.017, -0.08, 0.142); head.add(st);
+  }
+  g.userData.head = head;
+  return { group: g, head };
+}
+
 // ---- TV CRT (para VHS / ambiente) ----------------------------------------
 export function makeTV() {
   const g = new THREE.Group();

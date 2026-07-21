@@ -7,7 +7,8 @@ import * as THREE from "three";
 import { sizeLowRes } from "./ps1.js";
 import {
   makeRoom, makeTable, makeBlackBox, makeChair, makeFigure, makeSlotCabinet,
-  makePlacard, paintPlacard, makeSlotMachine, makeRevolver, makeBriefcase, makeRelic, SLOT_SYMS,
+  makePlacard, paintPlacard, makeSlotMachine, makeRevolver, makeBriefcase, makeRelic, makeDoll,
+  makeMysteryBox, SLOT_SYMS,
 } from "./models.js";
 import { makeItem } from "./items3d.js";
 import { Assets } from "./assets.js";
@@ -41,11 +42,12 @@ export class SceneManager {
     this.tableLight.position.set(0, 3.4, 0);
     this.scene.add(this.tableLight);
     this._tableLight0 = 2.6;
-    // luz cálida baja que lame el fieltro de la mesa
-    this.feltLight = new THREE.PointLight(0xffb070, 1.05, 6.5, 1.7);
+    // luz cálida baja que lame el fieltro y los props de la mesa (props legibles
+    // sin iluminar el fondo: está baja y con caída fuerte)
+    this.feltLight = new THREE.PointLight(0xffb878, 1.5, 8, 1.6);
     this.feltLight.position.set(0, 1.05, 0);
     this.scene.add(this.feltLight);
-    this._feltLight0 = 1.05;
+    this._feltLight0 = 1.5;
     const boxGlow = new THREE.PointLight(0xd94b3a, 0.55, 4.5, 1.6);
     boxGlow.position.set(0, 1.4, 0.6);
     this.scene.add(boxGlow);
@@ -173,6 +175,7 @@ export class SceneManager {
 
     this.seatObjs = new Map();
     this.seatWorld = new Map();
+    this.dolls = new Map();        // seat -> {group, head} (Muñeca Maldita al lado del dueño)
     this.mySeat = null; this.holderSeat = null;
     this.targetBoxScale = 1; this.casinoActive = false; this.casinoLevel = 0;
     this.stage = null;            // 'slots' | 'revolver' | 'briefcase' | null
@@ -254,6 +257,9 @@ export class SceneManager {
       }
     });
 
+    // muñecas malditas: una al lado del asiento de cada dueño (todos las ven)
+    this._layoutDolls(seats);
+
     // objetos (izq) / reliquias (der) del jugador local + reliquias ajenas (con Ojo)
     this._layoutInventory(state, seats, n);
 
@@ -263,11 +269,11 @@ export class SceneManager {
     else if (state.phase === "CASINO") this.crtMode = "casino";
     else this.crtMode = "idle";
 
-    // objeto flotante (OBJETOS)
-    const objType = state.phase === "OBJETOS" && cur ? cur.face.type : null;
+    // objeto flotante (OBJETOS): SIEMPRE una caja misteriosa (el objeto está cerrado)
+    const objType = state.phase === "OBJETOS" && cur ? "mystery" : null;
     if (objType !== this.objType) {
       if (this.objectProp) { this.scene.remove(this.objectProp); this.objectProp = null; }
-      if (objType) { this.objectProp = this._itemMesh(objType); this.scene.add(this.objectProp); }
+      if (objType) { this.objectProp = makeMysteryBox(); this.scene.add(this.objectProp); }
       this.objType = objType;
     }
 
@@ -311,9 +317,7 @@ export class SceneManager {
         stock.forEach((o, i) => {
           let m;
           if (o.kind === "relic") {
-            m = this.assets.has(o.id)
-              ? this.assets.spawn(o.id, { onReady: (inner, holder) => { if (!inner) holder.add(makeRelic(o.id)); } })
-              : makeRelic(o.id);
+            m = this._relicMesh(o.id);
           } else {
             m = this._itemMesh(o.id);
           }
@@ -336,9 +340,33 @@ export class SceneManager {
   }
 
   _relicMesh(id) {
+    if (id === "muneca") return makeDoll().group;   // muñeca procedural (ver models.js)
     return this.assets.has(id)
       ? this.assets.spawn(id, { onReady: (inner, holder) => { if (!inner) holder.add(makeRelic(id)); } })
       : makeRelic(id);
+  }
+
+  // Muñeca Maldita: prop al lado del asiento de cada dueño. La cabeza rota cada
+  // frame (en render) para seguir con la mirada al jugador de turno.
+  _layoutDolls(seats) {
+    const want = new Set(seats.filter((s) => s.hasDoll).map((s) => s.seat));
+    for (const [seat, d] of this.dolls)
+      if (!want.has(seat)) { this.scene.remove(d.group); this.dolls.delete(seat); }
+    for (const s of seats) {
+      if (!s.hasDoll) continue;
+      const pos = this.seatWorld.get(s.seat);
+      if (!pos) continue;
+      let d = this.dolls.get(s.seat);
+      if (!d) {
+        const md = makeDoll();
+        this.scene.add(md.group);
+        d = { group: md.group, head: md.head };
+        this.dolls.set(s.seat, d);
+      }
+      const inward = pos.clone().setY(0).multiplyScalar(2.15 / RSEAT);
+      const tang = new THREE.Vector3(pos.z, 0, -pos.x).normalize();
+      d.group.position.set(inward.x + tang.x * 0.72, 0, inward.z + tang.z * 0.72);
+    }
   }
 
   // Coloca en 3D sobre la mesa: objetos del jugador (izquierda), reliquias (derecha),
@@ -349,18 +377,20 @@ export class SceneManager {
     const rel = state.you.relics || [];
     const fwd = new THREE.Vector3(-this.camBase.x, 0, -this.camBase.z).normalize();
     const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
-    // más cerca del jugador (más adelante y a la vista), apoyados en el borde de la mesa
-    const anchor = new THREE.Vector3(this.camBase.x, 0, this.camBase.z).addScaledVector(fwd, 1.35);
+    // hacia ADELANTE sobre la mesa (hacia el centro), bien a la vista y sin cortarse
+    const anchor = new THREE.Vector3(this.camBase.x, 0, this.camBase.z).addScaledVector(fwd, 2.0);
 
     const invKey = inv.map((o) => o.uid).join(",");
     if (invKey !== this._invKey) {
       this._invKey = invKey;
-      this._rebuildTableGroup(this.myItems, inv.map((o) => ({ ...o, kind: "object" })), 0.95);
+      this._rebuildTableGroup(this.myItems, inv.map((o) => ({ ...o, kind: "object" })), 1.0);
     }
-    const relKey = rel.map((r) => r.id).join(",");
+    // la muñeca NO va en la fila de reliquias: se muestra como el prop al lado del asiento
+    const relShown = rel.filter((r) => r.id !== "muneca");
+    const relKey = relShown.map((r) => r.id).join(",");
     if (relKey !== this._relKey) {
       this._relKey = relKey;
-      this._rebuildTableGroup(this.myRelics, rel.map((r) => ({ ...r, kind: "relic" })), 1.05);
+      this._rebuildTableGroup(this.myRelics, relShown.map((r) => ({ ...r, kind: "relic" })), 1.1);
     }
     this._placeRow(this.myItems, anchor, right, -1);
     this._placeRow(this.myRelics, anchor, right, +1);
@@ -377,10 +407,11 @@ export class SceneManager {
         const f = new THREE.Vector3(-pos.x, 0, -pos.z).normalize();
         const r = new THREE.Vector3(f.z, 0, -f.x);
         const a = pos.clone().setY(0).addScaledVector(f, 0.8);
-        s.relicIds.forEach((id, i) => {
+        const ids = s.relicIds.filter((id) => id !== "muneca");   // muñeca = prop al lado
+        ids.forEach((id, i) => {
           const m = this._relicMesh(id);
           m.scale.setScalar(1.3);
-          const off = (i - (s.relicIds.length - 1) / 2) * 0.32;
+          const off = (i - (ids.length - 1) / 2) * 0.32;
           m.position.set(a.x + r.x * off, 0.16, a.z + r.z * off);
           this.othersRelics.add(m);
         });
@@ -401,9 +432,9 @@ export class SceneManager {
       const rest = 0.5 + i * 1.7;
       m.userData = Object.assign(m.userData || {}, {
         kind: entry.kind, uid: entry.uid, type: entry.type, target: entry.target, relicId: entry.id,
-        baseScale, baseY: 0.12, rest, hover: false,
+        baseScale, baseY: 0.16, rest, hover: false,
       });
-      m.position.set(0, 0.12, 0);
+      m.position.set(0, 0.16, 0);
       m.rotation.y = rest;
       m.scale.setScalar(baseScale);
       group.add(m);
@@ -412,8 +443,9 @@ export class SceneManager {
   }
 
   _placeRow(group, anchor, right, side) {
+    // más separación para que no se amontonen y puedas elegir cada uno
     group.children.forEach((m, i) => {
-      const off = side * (0.44 + i * 0.34);
+      const off = side * (0.5 + i * 0.52);
       m.position.x = anchor.x + right.x * off;
       m.position.z = anchor.z + right.z * off;
     });
@@ -771,6 +803,17 @@ export class SceneManager {
 
     let i = 0;
     for (const obj of this.seatObjs.values()) { obj.figure.position.y = Math.sin(t * 1.1 + i) * 0.015; i++; }
+
+    // muñecas: la cabeza sigue con la mirada al jugador de turno (o a la caja en reposo)
+    for (const [seat, d] of this.dolls) {
+      const tw = this.holderSeat != null ? this.seatWorld.get(this.holderSeat) : null;
+      const tx = tw ? tw.x : 0, tz = tw ? tw.z : 0;
+      const yaw = Math.atan2(tx - d.group.position.x, tz - d.group.position.z);
+      let dy = yaw - d.head.rotation.y;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));   // camino más corto
+      d.head.rotation.y += dy * 0.12;
+      d.head.rotation.z = Math.sin(t * 1.3 + seat) * 0.06;   // ladeo espeluznante
+    }
 
     // objetos/reliquias sobre la mesa: girito lento + hover que levanta y agranda
     const showInv = this.state && this.state.phase !== "CASINO" && this.state.phase !== "SPIN";

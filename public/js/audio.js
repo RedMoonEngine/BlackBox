@@ -103,6 +103,10 @@ export class Audio {
         this._noiseBurst(0.7, 0.8, 220); this._beep(50, 0.7, "sawtooth", 0.55, 24);
         setTimeout(() => this._noiseBurst(0.5, 0.25, 500), 60);
         break;
+      case "scare":   // jumpscare de la Muñeca: chillido + estática fuerte
+        this._noiseBurst(0.55, 0.75, 1300); this._beep(1000, 0.55, "sawtooth", 0.55, 70);
+        setTimeout(() => this._noiseBurst(0.45, 0.5, 480), 70);
+        break;
     }
   }
 

@@ -39,9 +39,19 @@ OBJECTS = {
     "vhs":         {"emoji": "📼", "name": "VHS",      "use": True,  "target": "other", "desc": "Le metés estática y glitch a la pantalla de alguien."},
 }
 
-# objetos que pueden aparecer en OBJETOS segun cuan despierto esta el casino
-LOOT_POOL = ["whisky", "llave", "dado", "jeringa", "telefono", "bolsa", "linterna", "iman", "comodin", "vhs"]
-DANGER_POOL = ["bomba", "sospechosa", "maldicion", "dinamita"]
+# --- roles (para el sistema "a ciegas") ---
+#   TRAP: al ABRIR te lastima a vos (querés pasarlo).
+#   BOON: al ABRIR te da algo bueno YA (fichas / vida).
+#   TOOL: al ABRIR va a tu INVENTARIO para usar cuando quieras.
+# Como los objetos llegan CERRADOS, no sabés cuál es: por eso pasar (regalar) uno
+# tiene sentido — puede ser una bomba disfrazada de regalo.
+TRAP_POOL = ["bomba", "dinamita", "maldicion", "sospechosa"]
+BOON_POOL = ["llave", "bolsa", "dado"]
+TOOL_POOL = ["whisky", "jeringa", "telefono", "linterna", "iman", "comodin", "vhs"]
+
+# aliases que usa el resto del motor
+LOOT_POOL = BOON_POOL + TOOL_POOL      # lo "no peligroso" (slots, caos, comodín…)
+DANGER_POOL = TRAP_POOL
 
 
 def emoji(t):
@@ -115,65 +125,88 @@ def _w(rng, menace, options):
 # ABRIR (objetos peligrosos / ocultos)
 # --------------------------------------------------------------------------- #
 def resolve_open(t, ctx):
+    """ABRIR un objeto CERRADO. El que lo abre se come el resultado:
+       TRAP -> lo lastima | BOON -> premio instantáneo | TOOL -> va a su inventario."""
     u = ctx.user
     nm = u.name
     rng = ctx.rng
     men = ctx.menace
 
+    # ---------------- TRAMPAS (querías no abrirlas) ----------------
     if t == "bomba":
         def boom():
             dmg = 2 if ctx.has_relic(u, "cuernos") else 1
-            return result(f"💥 {nm} abrió la bomba. −{dmg} ❤", "bad", hpDelta={u.seat: -dmg},
-                          emoji="💣", name="Bomba")
+            return result(f"💥 ¡Era una BOMBA! Le explota a {nm}. −{dmg} ❤", "bad",
+                          hpDelta={u.seat: -dmg}, emoji="💣", name="Bomba")
 
         def dud():
-            return result(f"La bomba de {nm} era un dud. Nada.", "weird", emoji="💣", name="Bomba")
-        return _w(rng, men, [(64, "bad", boom), (36, "good", dud)])
+            return result(f"💣 Era una bomba… pero estaba desactivada. {nm} zafó.", "weird",
+                          emoji="💣", name="Bomba (dud)")
+        return _w(rng, men, [(68, "bad", boom), (32, "good", dud)])
 
     if t == "dinamita":
         others = ctx.alive_others()
         hp = {u.seat: -2}
-        txt = f"🧨 {nm} encendió la dinamita. −2 ❤"
+        txt = f"🧨 ¡DINAMITA! {nm} se lleva el estallido. −2 ❤"
         if others:
             v = rng.choice(others)
             hp[v.seat] = -1
-            txt += f" (y salpicó a {v.name})"
+            txt += f" y una esquirla hiere a {v.name} (−1 ❤)"
         return result(txt, "bad", hpDelta=hp, emoji="🧨", name="Dinamita")
-
-    if t == "sospechosa":
-        def coins():
-            n = rng.randint(8, 16)
-            return result(f"📦 La caja de {nm} tenía {n} fichas.", "good", chipDelta={u.seat: n},
-                          emoji="📦", name="Caja sospechosa")
-
-        def trap():
-            return result(f"📦 La caja de {nm} tenía una trampa. −1 ❤", "bad", hpDelta={u.seat: -1},
-                          emoji="📦", name="Caja sospechosa")
-
-        def obj():
-            g = rng.choice(LOOT_POOL)
-            return result(f"📦 De la caja de {nm} salió {name(g)} {emoji(g)}.", "weird",
-                          give={u.seat: g}, emoji="📦", name="Caja sospechosa")
-        return _w(rng, men, [(38, "good", coins), (34, "bad", trap), (28, "neutral", obj)])
 
     if t == "maldicion":
         def curse_hp():
-            return result(f"🕯️ La maldición cayó sobre {nm}. −1 ❤", "bad", hpDelta={u.seat: -1},
+            return result(f"🕯️ Una MALDICIÓN cae sobre {nm}. −1 ❤", "bad", hpDelta={u.seat: -1},
                           menace=1, emoji="🕯️", name="Maldición")
 
         def curse_chips():
-            n = min(u.chips, rng.randint(4, 10))
-            return result(f"🕯️ La maldición se llevó {n} fichas de {nm}.", "bad",
+            n = min(u.chips, rng.randint(5, 12))
+            return result(f"🕯️ La maldición se traga {n} fichas de {nm}.", "bad",
                           chipDelta={u.seat: -n}, menace=1, emoji="🕯️", name="Maldición")
 
         def backfire():
-            return result(f"🕯️ La maldición se disolvió sin hacer nada.", "weird",
+            return result(f"🕯️ La maldición se deshizo en humo. Nada.", "weird",
                           emoji="🕯️", name="Maldición")
-        return _w(rng, men, [(42, "bad", curse_hp), (38, "bad", curse_chips), (20, "good", backfire)])
+        return _w(rng, men, [(44, "bad", curse_hp), (38, "bad", curse_chips), (18, "good", backfire)])
 
-    # loot abierto sin querer -> simplemente lo obtenés
-    return result(f"{nm} agarró {name(t)} {emoji(t)}.", "good", give={u.seat: t},
-                  emoji=emoji(t), name=name(t))
+    if t == "sospechosa":   # el verdadero comodín: puede ser tesoro o trampa
+        def coins():
+            n = rng.randint(10, 20)
+            return result(f"📦 La caja sospechosa de {nm} estaba llena de fichas: +{n}.", "good",
+                          chipDelta={u.seat: n}, emoji="📦", name="Caja sospechosa")
+
+        def trap():
+            return result(f"📦 La caja sospechosa de {nm} tenía un resorte con púas. −1 ❤", "bad",
+                          hpDelta={u.seat: -1}, emoji="📦", name="Caja sospechosa")
+
+        def tool():
+            g = rng.choice(TOOL_POOL)
+            return result(f"📦 De la caja de {nm} salió una herramienta: {name(g)} {emoji(g)}.", "good",
+                          give={u.seat: g}, emoji="📦", name="Caja sospechosa")
+        return _w(rng, men, [(40, "good", coins), (34, "bad", trap), (26, "neutral", tool)])
+
+    # ---------------- PREMIOS instantáneos ----------------
+    if t == "llave":
+        n = rng.randint(9, 15)
+        return result(f"🔑 {nm} abrió la caja fuerte del casino: +{n} fichas.", "good",
+                      chipDelta={u.seat: n}, emoji="🔑", name="Llave")
+
+    if t == "bolsa":
+        n = rng.randint(7, 13)
+        return result(f"👝 {nm} vació la bolsa de fichas: +{n}.", "good",
+                      chipDelta={u.seat: n}, emoji="👝", name="Bolsa de fichas")
+
+    if t == "dado":
+        if rng.random() < 0.6:
+            n = rng.randint(8, 14)
+            return result(f"🎲 {nm} tiró el dado y salió bien: +{n} fichas.", "good",
+                          chipDelta={u.seat: n}, emoji="🎲", name="Dado")
+        return result(f"🎲 {nm} tiró el dado y salió mal. −1 ❤", "bad", hpDelta={u.seat: -1},
+                      emoji="🎲", name="Dado")
+
+    # ---------------- HERRAMIENTAS (van al inventario para usar cuando quieras) ----------------
+    return result(f"🎁 {nm} desenvolvió una herramienta: {name(t)} {emoji(t)}. Guardala y usala en el momento justo.",
+                  "good", give={u.seat: t}, emoji=emoji(t), name=name(t))
 
 
 # --------------------------------------------------------------------------- #

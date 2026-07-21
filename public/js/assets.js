@@ -40,15 +40,17 @@ export const MANIFEST = {
   mascara:   { url: R + "MascaraDeLosHorrores.glb",   fit: "max", size: 0.34, anchor: "center", rot: [0, 0, 0] },
   // reliquias nuevas
   sombrero:  { url: R + "SombreroDelDesquiciado.glb", fit: "max", size: 0.38, anchor: "center", rot: [0, 0, 0] },
-  muneca:    { url: R + "MuñecaMaldita.glb",          fit: "max", size: 0.36, anchor: "center", rot: [0, 0, 0] },
+  // La Muñeca es un modelo RIGGEADO (bind-pose chico) -> escala explícita como el
+  // personaje. Se usa como prop grande al lado del asiento del dueño.
+  muneca:    { url: R + "MuñecaMaldita.glb",          scale: 3.4, anchor: "bottom", rot: [0, 0, 0] },
   camara:    { url: R + "CamaraInstantanea.glb",      fit: "max", size: 0.34, anchor: "center", rot: [0, 0, 0] },
 };
 
 // Items que el usuario entregó como PNG (con alpha): se muestran como una carta 3D
 // (plano doble-cara con la textura) que gira en el espacio.
 export const CARDS = {
-  comodin:   { url: A + "Comodin.png",   height: 0.5 },
-  maldicion: { url: A + "Maldicion.png", height: 0.5 },
+  comodin:   { url: A + "Comodin.png",   height: 0.3 },
+  maldicion: { url: A + "Maldicion.png", height: 0.3 },
 };
 
 export class Assets {

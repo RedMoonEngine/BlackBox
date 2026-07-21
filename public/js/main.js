@@ -49,6 +49,10 @@ function onMsg(msg) {
     case "phone":
       ui.phone(msg.line);
       break;
+    case "jumpscare":
+      audio.sfx("scare");
+      ui.jumpscare(msg);
+      break;
     case "glitch":
       glitch(msg.secs);
       break;
