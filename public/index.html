@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>BLACK BOX 📼🎰</title>
+<link rel="stylesheet" href="/css/style.css" />
+<script type="importmap">
+{ "imports": { "three": "/vendor/three.module.js" } }
+</script>
+</head>
+<body>
+  <!-- Render 3D -->
+  <canvas id="gl"></canvas>
+
+  <!-- Overlays CRT/PS1 -->
+  <div id="crt" class="crt"></div>
+  <div id="vignette" class="vignette"></div>
+
+  <!-- ================= LOBBY ================= -->
+  <div id="lobby" class="screen">
+    <div class="lobby-card">
+      <h1 class="logo">BLACK&nbsp;BOX <span class="logo-emo">📼🎰</span></h1>
+      <p class="tag">"Cada vez que alguien la abre, alguien sale ganando y otro no."</p>
+
+      <div id="lobby-join">
+        <label>Tu nombre
+          <input id="in-name" maxlength="16" placeholder="Anónimo" autocomplete="off" />
+        </label>
+        <label>Código de sala <span class="hint">(vacío = crear una)</span>
+          <input id="in-room" maxlength="4" placeholder="CREAR" autocomplete="off" />
+        </label>
+        <button id="btn-join" class="big">SENTARSE A LA MESA</button>
+        <p id="lobby-err" class="err"></p>
+      </div>
+
+      <div id="lobby-room" class="hidden">
+        <p class="room-code">SALA <b id="room-code">----</b></p>
+        <p class="hint">pasa el codigo a un amigo (2 a 8 jugadores).</p>
+        <ul id="seat-list" class="seat-list"></ul>
+        <button id="btn-start" class="big hidden">ABRIR LA CAJA</button>
+        <p id="wait-host" class="hint hidden">Esperando a que el anfitrión abra la caja xd</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= HUD ================= -->
+  <div id="hud" class="hidden">
+    <div id="topbar">
+      <div class="tb-left">
+        <span class="pill">RONDA <b id="hud-round">0</b></span>
+        <span class="pill">CAJA <b id="hud-box">3</b></span>
+        <span class="pill corrupt" id="hud-corrupt-pill">CORRUPCIÓN <b id="hud-corrupt">0</b></span>
+      </div>
+      <div class="tb-right">
+        <span id="hud-hp" class="hp"></span>
+        <span class="pill coins">🪙 <b id="hud-coins">0</b></span>
+      </div>
+    </div>
+
+    <div id="phase-banner" class="phase-banner"></div>
+
+    <!-- panel de accion del sostenedor -->
+    <div id="action-panel" class="action-panel hidden">
+      <div id="held-info" class="held-info"></div>
+      <div id="timer-wrap"><div id="timer-bar"></div><span id="timer-num"></span></div>
+      <div id="action-btns" class="action-btns"></div>
+      <div id="push-picker" class="push-picker hidden"></div>
+    </div>
+
+    <!-- info cuando NO es tu turno -->
+    <div id="spectate" class="spectate hidden"></div>
+
+    <div id="log" class="log"></div>
+    <div id="hints" class="hints"></div>
+  </div>
+
+  <!-- ================= REVEAL ================= -->
+  <div id="reveal" class="reveal hidden">
+    <div class="reveal-card">
+      <div class="reveal-emoji"></div>
+      <div class="reveal-name"></div>
+      <div class="reveal-text"></div>
+    </div>
+  </div>
+
+  <!-- ================= TELÉFONO ================= -->
+  <div id="phone" class="phone hidden">
+    <div class="phone-card">
+      <div class="phone-emoji">☎️</div>
+      <div id="phone-status" class="phone-status">Está sonando…</div>
+      <div id="phone-line" class="phone-line"></div>
+      <div id="phone-btns" class="phone-btns">
+        <button id="btn-answer" class="big danger">ATENDER</button>
+        <button id="btn-ignore" class="big ghost">IGNORAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TIENDA ================= -->
+  <div id="shop" class="shop hidden">
+    <div class="shop-card">
+      <h2>MERCADO NEGRO <span class="hint">gastá tus 🪙 antes de la próxima caja</span></h2>
+      <div class="shop-coins">Tenés <b id="shop-coins">0</b> 🪙</div>
+      <div id="shop-grid" class="shop-grid"></div>
+      <div class="shop-foot">
+        <div id="shop-ready" class="hint"></div>
+        <button id="btn-ready" class="big">LISTO</button>
+      </div>
+      <div id="shop-timer" class="shop-timer"></div>
+    </div>
+  </div>
+
+  <!-- ================= GAME OVER ================= -->
+  <div id="gameover" class="gameover hidden">
+    <div class="go-card">
+      <h1 id="go-title">☠</h1>
+      <p id="go-sub"></p>
+      <button id="btn-again" class="big hidden">OTRA CAJA</button>
+      <p id="go-wait" class="hint hidden">Esperando al anfitrión…</p>
+    </div>
+  </div>
+
+  <div id="tips" class="tips"></div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
