@@ -1,100 +1,111 @@
-"""Construccion de la vista que ve CADA jugador.
-
-Aca se garantiza que el efecto oculto de un objeto no viaje al cliente antes de
-resolverse: 'current' publico no lleva el tipo del objeto; solo el sostenedor
-(o quien uso 👁) recibe el TIPO, nunca el efecto.
-"""
+"""Vista por-jugador (v2). No filtra efectos ocultos ni la info tapada por la Máscara."""
 
 import time
 
-from . import items
+from . import items, relics
 
 
-def _remaining_ms(deadline):
-    if deadline is None:
+def _ms(deadline):
+    if not deadline:
         return None
     return max(0, int((deadline - time.time()) * 1000))
 
 
-def _seat_view(room, p):
-    cur = room.current
-    return {
-        "seat": p.seat,
-        "name": p.name,
-        "alive": p.alive,
-        "hp": p.hp,
-        "coins": p.coins,
-        "connected": p.connected,
-        "ready": p.ready,
-        "isHolder": bool(cur and cur["holder_seat"] == p.seat),
-    }
+def _face(t):
+    return {"type": t, "emoji": items.emoji(t), "name": items.name(t)}
 
 
-def _item_face(item_type):
-    return {"type": item_type, "emoji": items.emoji(item_type), "name": items.label(item_type)}
+def _relic_list(ids):
+    out = []
+    for rid in ids:
+        m = relics.meta(rid)
+        out.append({"id": rid, "emoji": m["emoji"], "name": m["name"], "desc": m["desc"]})
+    return out
+
+
+def _inv_list(inv):
+    out = []
+    for o in inv:
+        t = o["type"]
+        meta = items.OBJECTS.get(t, {})
+        out.append({"uid": o["uid"], "type": t, "emoji": items.emoji(t), "name": items.name(t),
+                    "use": meta.get("use", False), "target": meta.get("target", "self"),
+                    "desc": meta.get("desc", "")})
+    return out
 
 
 def build_state(room, viewer):
-    seats = [_seat_view(room, room.players[s]) for s in sorted(room.players)]
+    sees_all = relics.sees_all(viewer)
+    cur = room.current
+
+    seats = []
+    for s in sorted(room.players):
+        p = room.players[s]
+        hide = relics.hides_info(p) and p.seat != viewer.seat and not sees_all
+        seats.append({
+            "seat": p.seat, "name": p.name, "alive": p.alive, "hp": p.hp,
+            "chips": None if hide else p.chips,
+            "invCount": None if hide else len(p.inventory),
+            "connected": p.connected, "ready": p.ready,
+            "bet": p.bet if room.phase == "BET" else None,
+            "relics": [relics.meta(r)["emoji"] for r in p.relics],
+            # ids para dibujar sus reliquias en 3D: las propias siempre; las ajenas
+            # solo si el que mira "ve todo" (reliquia Ojo del Vidente)
+            "relicIds": list(p.relics) if (p.seat == viewer.seat or sees_all) else [],
+            "isHolder": bool(cur and cur["holder_seat"] == p.seat)
+                        or bool(room.roulette and room.roulette.get("holder_seat") == p.seat),
+        })
 
     current = None
-    if room.current:
-        c = room.current
-        current = {
-            "holderSeat": c["holder_seat"],
-            "pushesLeft": c["pushes_left"],
-            "timerMs": _remaining_ms(c.get("timer_end")),
-            "itemsLeft": c["items_left"],
-            "mysteryId": c["mystery_id"],
-        }
+    if cur:
+        current = {"holderSeat": cur["holder_seat"], "face": _face(cur["otype"]),
+                   "danger": cur["danger"], "pushesLeft": cur["pushes_left"],
+                   "timerMs": _ms(cur.get("timer_end")), "itemsLeft": cur["items_left"]}
 
-    shop = None
-    if room.shop:
-        shop = {
-            "offers": room.shop["offers"],
-            "timerMs": _remaining_ms(room.shop.get("timer_end")),
-            "ready": sorted(room.shop["ready"]),
-        }
+    slots = None
+    if room.slots:
+        slots = {"timerMs": _ms(room.slots.get("timer_end")), "results": room.slots["results"]}
 
-    # bloque privado del que mira
-    held_face = None
-    if room.current and room.current["holder_seat"] == viewer.seat:
-        held_face = _item_face(room.current["item_type"])
-    peek_face = None
-    if room.current and viewer.seat in room.current.get("revealed_to", set()):
-        peek_face = _item_face(room.current["item_type"])
+    roulette = None
+    if room.roulette:
+        r = room.roulette
+        roulette = {"holderSeat": r.get("holder_seat"), "chambers": r.get("chambers"),
+                    "reward": r.get("reward"), "timerMs": _ms(r.get("timer_end")),
+                    "in": r.get("in", [])}
 
-    upgrades = {k: v for k, v in viewer.upgrades.items() if v}
+    event = None
+    if room.event:
+        e = room.event
+        event = {"id": e.get("id"), "text": e.get("text"), "prize": e.get("prize"),
+                 "timerMs": _ms(e.get("timer_end"))}
+
+    market = None
+    if room.market:
+        market = {"stock": room.market["stock"], "sold": room.market["sold"],
+                  "timerMs": _ms(room.market.get("timer_end"))}
 
     you = {
-        "seat": viewer.seat,
-        "name": viewer.name,
-        "hp": viewer.hp,
-        "coins": viewer.coins,
-        "alive": viewer.alive,
-        "ready": viewer.ready,
-        "upgrades": upgrades,
-        "hints": viewer.private_hints[-6:],
-        "heldFace": held_face,     # el sostenedor ve el TIPO (no el efecto)
-        "peekFace": peek_face,     # 👁 revelo el tipo aunque no lo sostenga
+        "seat": viewer.seat, "name": viewer.name, "hp": viewer.hp, "chips": viewer.chips,
+        "alive": viewer.alive, "ready": viewer.ready, "bet": viewer.bet, "whisky": viewer.whisky,
         "isHost": room.host_seat == viewer.seat,
-        "canAct": bool(room.current and room.current["holder_seat"] == viewer.seat
-                       and room.phase == "CHOOSE" and viewer.alive),
+        "relics": _relic_list(viewer.relics),
+        "inventory": _inv_list(viewer.inventory),
+        "hints": viewer.private_hints[-6:],
+        "canAct": bool(cur and cur["holder_seat"] == viewer.seat and room.phase == "OBJETOS"
+                       and viewer.alive),
+        "rouletteTurn": bool(room.roulette and room.roulette.get("holder_seat") == viewer.seat
+                             and viewer.alive),
+        "canSpin": bool(room.phase == "SLOTS" and viewer.alive and not viewer.slot_done),
+        "myReels": (room.slots["results"].get(viewer.seat) if room.slots else None),
     }
 
     return {
-        "t": "state",
-        "code": room.code,
-        "phase": room.phase,
-        "round": room.round,
-        "boxSize": room.box_size,
-        "corruption": room.corruption,
-        "hostSeat": room.host_seat,
-        "started": room.started,
-        "seats": seats,
-        "current": current,
-        "shop": shop,
+        "t": "state", "code": room.code, "phase": room.phase, "round": room.round,
+        "menace": room.box.menace if room.box else 0, "pot": room.pot, "betCap": room.bet_cap,
+        "betTimerMs": _ms(getattr(room, "bet_end", None)) if room.phase == "BET" else None,
+        "hostSeat": room.host_seat, "started": room.started, "activity": room.activity,
         "winnerSeat": room.winner_seat,
-        "log": room.log[-9:],
-        "you": you,
+        "seats": seats, "current": current, "slots": slots, "roulette": roulette,
+        "event": event, "market": market,
+        "log": room.log[-9:], "you": you,
     }

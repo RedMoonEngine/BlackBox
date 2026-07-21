@@ -1,67 +1,109 @@
-"""Catalogo de objetos y resolucion de efectos OCULTOS.
+"""Objetos consumibles: catalogo, apertura (ABRIR) y uso activo (USAR desde inventario).
 
-Regla de oro: el efecto real de un objeto se decide aca, en el servidor, recien
-al RESOLVER (usar/abrir). El cliente nunca lo recibe antes. La etiqueta que ven
-los demas es solo "un objeto misterioso"; el que lo sostiene ve el TIPO
-(radio, bomba, ...) pero no el efecto.
+Dos roles:
+  - Objetos PELIGROSOS / ocultos (bomba, dinamita, caja sospechosa, maldición): en OBJETOS se
+    ABREN ahora (riesgo público) o se EMPUJAN a otro. No se pueden guardar "vivos".
+  - Objetos LOOT (whisky, llave, dado, jeringa, teléfono, bolsa, linterna, imán, comodín, VHS):
+    se GUARDAN al inventario y se USAN después, cuando el contexto lo permite.
+
+La regla de oro se mantiene: el efecto de lo oculto se decide en el server al resolver.
 """
 
 # --------------------------------------------------------------------------- #
-# Constantes de balance
+# Balance
 # --------------------------------------------------------------------------- #
-START_HP = 2
-MAX_HP = 3
+START_HP = 3
+MAX_HP = 4
+INVENTORY_CAP = 6
 
-# tipos de objeto -> (emoji, nombre visible)
-ITEM_TYPES = {
-    "vhs":      ("📼", "VHS"),
-    "key":      ("🔑", "Llave"),
-    "bomb":     ("💣", "Bomba"),
-    "syringe":  ("💉", "Jeringa"),
-    "coins":    ("🪙", "Monedas"),
-    "radio":    ("📻", "Radio"),
-    "phone":    ("☎️", "Teléfono"),
-    "smallbox": ("📦", "Caja chica"),
+# tipo -> metadata
+#   danger: se ABRE/EMPUJA en OBJETOS (no se guarda vivo)
+#   hidden: no se sabe el efecto hasta resolver
+#   use:    tiene uso activo desde el inventario
+#   target: el uso pide objetivo ("self", "other", "any")
+OBJECTS = {
+    "bomba":       {"emoji": "💣", "name": "Bomba",         "danger": True,  "hidden": False, "use": False},
+    "dinamita":    {"emoji": "🧨", "name": "Dinamita",      "danger": True,  "hidden": False, "use": False},
+    "sospechosa":  {"emoji": "📦", "name": "Caja sospechosa","danger": True, "hidden": True,  "use": False},
+    "maldicion":   {"emoji": "🕯️", "name": "Maldición",      "danger": True,  "hidden": True,  "use": False},
+
+    "whisky":      {"emoji": "🥃", "name": "Whisky",   "use": True,  "target": "self",  "desc": "Ganás una recarga: reroll de un mal resultado de azar."},
+    "llave":       {"emoji": "🔑", "name": "Llave",    "use": True,  "target": "self",  "desc": "Abrís un compartimento: +fichas."},
+    "dado":        {"emoji": "🎲", "name": "Dado",     "use": True,  "target": "self",  "desc": "Tirás: puede ir bien o mal."},
+    "jeringa":     {"emoji": "💉", "name": "Jeringa",  "use": True,  "target": "any",   "desc": "A vos: +1 ❤. A otro: veneno −1 ❤."},
+    "telefono":    {"emoji": "☎️", "name": "Teléfono", "use": True,  "target": "self",  "desc": "Atendés: una voz dice algo... ¿verdad o mentira?"},
+    "bolsa":       {"emoji": "👝", "name": "Bolsa de fichas","use": True,"target": "self","desc": "Fichas sueltas: +fichas."},
+    "linterna":    {"emoji": "🔦", "name": "Linterna", "use": True,  "target": "self",  "desc": "Ves objetos ocultos y te protege del próximo monstruo."},
+    "iman":        {"emoji": "🧲", "name": "Imán",     "use": True,  "target": "other", "desc": "Le robás un objeto (o fichas) a alguien."},
+    "comodin":     {"emoji": "🃏", "name": "Comodín",  "use": True,  "target": "self",  "desc": "Se transforma en otro objeto al azar."},
+    "vhs":         {"emoji": "📼", "name": "VHS",      "use": True,  "target": "other", "desc": "Le metés estática y glitch a la pantalla de alguien."},
 }
 
-# que tipos existen segun cuan "grande" es la caja (round/boxSize).
-# la caja empieza chica y va abriendo compartimentos.
-UNLOCK_BY_ROUND = {
-    1: ["coins", "bomb", "radio", "syringe"],
-    2: ["coins", "bomb", "radio", "syringe", "key", "phone"],
-    3: ["coins", "bomb", "radio", "syringe", "key", "phone", "vhs", "smallbox"],
-}
+# objetos que pueden aparecer en OBJETOS segun cuan despierto esta el casino
+LOOT_POOL = ["whisky", "llave", "dado", "jeringa", "telefono", "bolsa", "linterna", "iman", "comodin", "vhs"]
+DANGER_POOL = ["bomba", "sospechosa", "maldicion", "dinamita"]
 
 
-def emoji(item_type):
-    return ITEM_TYPES.get(item_type, ("❓", "???"))[0]
+def emoji(t):
+    return OBJECTS.get(t, {}).get("emoji", "❓")
 
 
-def label(item_type):
-    return ITEM_TYPES.get(item_type, ("❓", "???"))[1]
+def name(t):
+    return OBJECTS.get(t, {}).get("name", "???")
+
+
+def is_danger(t):
+    return OBJECTS.get(t, {}).get("danger", False)
+
+
+def is_hidden(t):
+    return OBJECTS.get(t, {}).get("hidden", False)
+
+
+def has_use(t):
+    return OBJECTS.get(t, {}).get("use", False)
+
+
+def target_kind(t):
+    return OBJECTS.get(t, {}).get("target", "self")
 
 
 # --------------------------------------------------------------------------- #
-# Helpers de resolucion
+# Resultado
 # --------------------------------------------------------------------------- #
-def _weighted(rng, bias, options):
-    """options: lista de (weight, quality, fn). quality in {good,bad,neutral}.
+def result(text, tone, **extra):
+    r = {
+        "publicText": text,
+        "tone": tone,               # good | bad | weird | info
+        "hpDelta": {},              # {seat: delta}
+        "chipDelta": {},            # {seat: delta}
+        "hints": {},                # {seat: texto privado}
+        "phone": {},                # {seat: linea}
+        "give": {},                 # {seat: object_type}  -> al inventario
+        "steal": None,              # (from_seat, to_seat)
+        "shield": [],               # [seat]  protegido del proximo monstruo
+        "glitch": {},               # {seat: secs}
+        "reveal_hidden": [],        # [seat]  ve objetos ocultos
+        "menace": 0,                # sube el nivel del casino
+        "emoji": "❓", "name": "",  # para el reveal
+    }
+    r.update(extra)
+    return r
 
-    'bias' (aggro de la sala, -0.6..0.6) sube lo bueno y baja lo malo cuando es
-    positivo (sala agresiva -> mas recompensas), y al reves cuando es negativo
-    (sala pasiva/repetitiva -> peores objetos).
-    """
+
+def _w(rng, menace, options):
+    """options: (weight, quality, fn). quality good|bad|neutral. menace + -> peor."""
     adj = []
-    for w, quality, fn in options:
+    for wt, q, fn in options:
         m = 1.0
-        if quality == "good":
-            m = max(0.05, 1.0 + bias * 0.9)
-        elif quality == "bad":
-            m = max(0.05, 1.0 - bias * 0.9)
-        adj.append((w * m, fn))
+        if q == "good":
+            m = max(0.05, 1.0 - menace * 0.06)
+        elif q == "bad":
+            m = max(0.05, 1.0 + menace * 0.08)
+        adj.append((wt * m, fn))
     total = sum(w for w, _ in adj)
     r = rng.uniform(0, total)
-    acc = 0.0
+    acc = 0
     for w, fn in adj:
         acc += w
         if r <= acc:
@@ -69,269 +111,139 @@ def _weighted(rng, bias, options):
     return adj[-1][1]()
 
 
-def _result(ctx, item_type, effect_id, text, tone, **extra):
-    res = {
-        "itemType": item_type,
-        "emoji": emoji(item_type),
-        "name": label(item_type),
-        "effectId": effect_id,
-        "publicText": text,
-        "tone": tone,          # good | bad | weird | info
-        "hpDelta": {},         # {seat: delta}
-        "coinDelta": {},       # {seat: delta}
-        "privateHints": {},    # {seat: texto}
-        "phone": {},           # {seat: linea}
-        "spawn": None,         # tipo de objeto a encadenar (queda en manos del user)
-    }
-    res.update(extra)
-    return res
+# --------------------------------------------------------------------------- #
+# ABRIR (objetos peligrosos / ocultos)
+# --------------------------------------------------------------------------- #
+def resolve_open(t, ctx):
+    u = ctx.user
+    nm = u.name
+    rng = ctx.rng
+    men = ctx.menace
+
+    if t == "bomba":
+        def boom():
+            dmg = 2 if ctx.has_relic(u, "cuernos") else 1
+            return result(f"💥 {nm} abrió la bomba. −{dmg} ❤", "bad", hpDelta={u.seat: -dmg},
+                          emoji="💣", name="Bomba")
+
+        def dud():
+            return result(f"La bomba de {nm} era un dud. Nada.", "weird", emoji="💣", name="Bomba")
+        return _w(rng, men, [(64, "bad", boom), (36, "good", dud)])
+
+    if t == "dinamita":
+        others = ctx.alive_others()
+        hp = {u.seat: -2}
+        txt = f"🧨 {nm} encendió la dinamita. −2 ❤"
+        if others:
+            v = rng.choice(others)
+            hp[v.seat] = -1
+            txt += f" (y salpicó a {v.name})"
+        return result(txt, "bad", hpDelta=hp, emoji="🧨", name="Dinamita")
+
+    if t == "sospechosa":
+        def coins():
+            n = rng.randint(8, 16)
+            return result(f"📦 La caja de {nm} tenía {n} fichas.", "good", chipDelta={u.seat: n},
+                          emoji="📦", name="Caja sospechosa")
+
+        def trap():
+            return result(f"📦 La caja de {nm} tenía una trampa. −1 ❤", "bad", hpDelta={u.seat: -1},
+                          emoji="📦", name="Caja sospechosa")
+
+        def obj():
+            g = rng.choice(LOOT_POOL)
+            return result(f"📦 De la caja de {nm} salió {name(g)} {emoji(g)}.", "weird",
+                          give={u.seat: g}, emoji="📦", name="Caja sospechosa")
+        return _w(rng, men, [(38, "good", coins), (34, "bad", trap), (28, "neutral", obj)])
+
+    if t == "maldicion":
+        def curse_hp():
+            return result(f"🕯️ La maldición cayó sobre {nm}. −1 ❤", "bad", hpDelta={u.seat: -1},
+                          menace=1, emoji="🕯️", name="Maldición")
+
+        def curse_chips():
+            n = min(u.chips, rng.randint(4, 10))
+            return result(f"🕯️ La maldición se llevó {n} fichas de {nm}.", "bad",
+                          chipDelta={u.seat: -n}, menace=1, emoji="🕯️", name="Maldición")
+
+        def backfire():
+            return result(f"🕯️ La maldición se disolvió sin hacer nada.", "weird",
+                          emoji="🕯️", name="Maldición")
+        return _w(rng, men, [(42, "bad", curse_hp), (38, "bad", curse_chips), (20, "good", backfire)])
+
+    # loot abierto sin querer -> simplemente lo obtenés
+    return result(f"{nm} agarró {name(t)} {emoji(t)}.", "good", give={u.seat: t},
+                  emoji=emoji(t), name=name(t))
 
 
 # --------------------------------------------------------------------------- #
-# Resolvers por tipo
+# USAR (objeto de loot desde el inventario)
 # --------------------------------------------------------------------------- #
-def _radio(ctx):
+def use_object(t, ctx, target):
     u = ctx.user
-    name = u.name
+    nm = u.name
+    rng = ctx.rng
+    tp = ctx.player(target) if target is not None else None
 
-    def money():
-        n = ctx.rng.randint(6, 12)
-        return _result(ctx, "radio", "money", f"La radio de {name} escupió monedas. +{n} 🪙",
-                       "good", coinDelta={u.seat: n})
+    if t == "whisky":
+        u.whisky = getattr(u, "whisky", 0) + 1
+        return result(f"🥃 {nm} se toma un whisky. Mano firme (reroll listo).", "good",
+                      emoji="🥃", name="Whisky")
 
-    def explode():
-        return _result(ctx, "radio", "explode", f"La radio de {name} explotó. −1 ❤",
-                       "bad", hpDelta={u.seat: -1})
+    if t == "llave":
+        n = rng.randint(6, 11)
+        return result(f"🔑 {nm} abrió un compartimento. +{n} fichas.", "good",
+                      chipDelta={u.seat: n}, emoji="🔑", name="Llave")
 
-    def reveal():
-        other = ctx.random_other()
-        if other is None:
-            return money()
-        hint = ctx.hint_about(other)
-        return _result(ctx, "radio", "reveal",
-                       f"La radio de {name} sintonizó una frecuencia... (info privada)",
-                       "info", privateHints={u.seat: hint})
+    if t == "dado":
+        if rng.random() < 0.55:
+            n = rng.randint(6, 12)
+            return result(f"🎲 {nm} tiró y salió +{n} fichas.", "good", chipDelta={u.seat: n},
+                          emoji="🎲", name="Dado")
+        return result(f"🎲 {nm} tiró y perdió. −1 ❤", "bad", hpDelta={u.seat: -1},
+                      emoji="🎲", name="Dado")
 
-    def copy():
-        last = ctx.last_item_type or "coins"
-        return _result(ctx, "radio", "copy",
-                       f"La radio de {name} imitó al último objeto: {label(last)}.",
-                       "weird", spawn=last)
+    if t == "jeringa":
+        if tp is None or tp.seat == u.seat:
+            return result(f"💉 {nm} se inyecta. +1 ❤", "good", hpDelta={u.seat: +1},
+                          emoji="💉", name="Jeringa")
+        return result(f"💉 {nm} envenenó a {tp.name}. −1 ❤", "bad", hpDelta={tp.seat: -1},
+                      emoji="💉", name="Jeringa")
 
-    return _weighted(ctx.rng, ctx.bias, [
-        (30, "good", money),
-        (28, "bad", explode),
-        (22, "neutral", reveal),
-        (20, "neutral", copy),
-    ])
+    if t == "telefono":
+        line = ctx.phone_line()
+        return result(f"☎️ {nm} atendió el teléfono...", "info", phone={u.seat: line},
+                      emoji="☎️", name="Teléfono")
 
+    if t == "bolsa":
+        n = rng.randint(5, 12)
+        return result(f"👝 {nm} vació la bolsa. +{n} fichas.", "good", chipDelta={u.seat: n},
+                      emoji="👝", name="Bolsa de fichas")
 
-def _bomb(ctx):
-    u = ctx.user
-    name = u.name
+    if t == "linterna":
+        return result(f"🔦 {nm} encendió la linterna.", "info", shield=[u.seat],
+                      reveal_hidden=[u.seat], emoji="🔦", name="Linterna")
 
-    def boom():
-        return _result(ctx, "bomb", "boom", f"💥 La bomba de {name} detonó. −2 ❤",
-                       "bad", hpDelta={u.seat: -2})
+    if t == "iman":
+        if tp is None or tp.seat == u.seat:
+            return result(f"🧲 El imán de {nm} no agarró nada.", "weird", emoji="🧲", name="Imán")
+        if tp.inventory:
+            return result(f"🧲 {nm} le robó un objeto a {tp.name}.", "good",
+                          steal=(tp.seat, u.seat), emoji="🧲", name="Imán")
+        n = min(tp.chips, rng.randint(3, 7))
+        return result(f"🧲 {nm} le robó {n} fichas a {tp.name}.", "good",
+                      chipDelta={u.seat: n, tp.seat: -n}, emoji="🧲", name="Imán")
 
-    def small():
-        return _result(ctx, "bomb", "boom_small", f"💥 La bomba de {name} detonó. −1 ❤",
-                       "bad", hpDelta={u.seat: -1})
+    if t == "comodin":
+        g = rng.choice(LOOT_POOL)
+        return result(f"🃏 El comodín de {nm} se volvió {name(g)} {emoji(g)}.", "weird",
+                      give={u.seat: g}, emoji="🃏", name="Comodín")
 
-    def dud():
-        return _result(ctx, "bomb", "dud", f"La bomba de {name} era un dud. Nada pasó.",
-                       "weird")
+    if t == "vhs":
+        if tp is None or tp.seat == u.seat:
+            return result(f"📼 {nm} miró el VHS: pura estática.", "weird", glitch={u.seat: 4},
+                          emoji="📼", name="VHS")
+        return result(f"📼 {nm} le metió estática a la pantalla de {tp.name}.", "weird",
+                      glitch={tp.seat: 5}, emoji="📼", name="VHS")
 
-    def shrapnel():
-        other = ctx.random_other()
-        hp = {u.seat: -1}
-        txt = f"💥 Metralla de la bomba de {name}. −1 ❤"
-        if other is not None:
-            hp[other.seat] = -1
-            txt += f" (también hirió a {other.name})"
-        return _result(ctx, "bomb", "shrapnel", txt, "bad", hpDelta=hp)
-
-    return _weighted(ctx.rng, ctx.bias, [
-        (30, "bad", boom),
-        (26, "bad", small),
-        (26, "good", dud),
-        (18, "bad", shrapnel),
-    ])
-
-
-def _coins(ctx):
-    u = ctx.user
-    name = u.name
-
-    def small():
-        n = ctx.rng.randint(4, 7)
-        return _result(ctx, "coins", "small", f"{name} juntó {n} 🪙", "good",
-                       coinDelta={u.seat: n})
-
-    def jackpot():
-        n = ctx.rng.randint(13, 20)
-        return _result(ctx, "coins", "jackpot", f"💰 ¡Jackpot! {name} juntó {n} 🪙", "good",
-                       coinDelta={u.seat: n})
-
-    def fake():
-        return _result(ctx, "coins", "fake", f"Las monedas de {name} eran falsas. Nada.",
-                       "weird")
-
-    def trap():
-        return _result(ctx, "coins", "trap",
-                       f"Las monedas de {name} estaban trucadas. −1 ❤", "bad",
-                       hpDelta={u.seat: -1})
-
-    return _weighted(ctx.rng, ctx.bias, [
-        (34, "good", small),
-        (16, "good", jackpot),
-        (26, "neutral", fake),
-        (24, "bad", trap),
-    ])
-
-
-def _key(ctx):
-    u = ctx.user
-    name = u.name
-
-    def unlock():
-        n = ctx.rng.randint(7, 12)
-        return _result(ctx, "key", "unlock",
-                       f"{name} abrió un compartimento. +{n} 🪙", "good",
-                       coinDelta={u.seat: n})
-
-    def token():
-        n = ctx.rng.randint(3, 5)
-        return _result(ctx, "key", "token",
-                       f"{name} abrió una caja fuerte chica. +{n} 🪙", "good",
-                       coinDelta={u.seat: n})
-
-    def rusty():
-        return _result(ctx, "key", "rusty", f"La llave de {name} estaba oxidada. Nada.",
-                       "weird")
-
-    return _weighted(ctx.rng, ctx.bias, [
-        (34, "good", unlock),
-        (34, "good", token),
-        (32, "neutral", rusty),
-    ])
-
-
-def _syringe(ctx):
-    u = ctx.user
-    name = u.name
-
-    def heal():
-        if u.hp >= MAX_HP:
-            n = ctx.rng.randint(3, 6)
-            return _result(ctx, "syringe", "heal_full",
-                           f"{name} ya estaba a tope. La jeringa dio +{n} 🪙", "good",
-                           coinDelta={u.seat: n})
-        return _result(ctx, "syringe", "heal", f"{name} se curó. +1 ❤", "good",
-                       hpDelta={u.seat: +1})
-
-    def poison():
-        return _result(ctx, "syringe", "poison", f"La jeringa de {name} era veneno. −1 ❤",
-                       "bad", hpDelta={u.seat: -1})
-
-    def adrenaline():
-        n = ctx.rng.randint(5, 9)
-        return _result(ctx, "syringe", "adrenaline",
-                       f"Adrenalina para {name}. +{n} 🪙", "good", coinDelta={u.seat: n})
-
-    return _weighted(ctx.rng, ctx.bias, [
-        (36, "good", heal),
-        (30, "bad", poison),
-        (24, "good", adrenaline),
-    ])
-
-
-def _vhs(ctx):
-    u = ctx.user
-    name = u.name
-
-    def static():
-        return _result(ctx, "vhs", "static",
-                       f"El VHS de {name} sólo mostró estática.", "weird")
-
-    def shuffle():
-        return _result(ctx, "vhs", "shuffle",
-                       f"📼 El VHS de {name} mezcló lo que queda en la caja.", "weird",
-                       spawn=None, shuffle=True)
-
-    def glimpse():
-        nxt = ctx.next_item_type
-        hint = (f"El próximo objeto de la caja es: {label(nxt)}."
-                if nxt else "No hay más objetos esta ronda.")
-        return _result(ctx, "vhs", "glimpse",
-                       f"El VHS de {name} adelantó imágenes... (info privada)", "info",
-                       privateHints={u.seat: hint})
-
-    def rewind():
-        if u.hp < MAX_HP:
-            return _result(ctx, "vhs", "rewind",
-                           f"El VHS rebobinó a {name}. +1 ❤", "good", hpDelta={u.seat: +1})
-        n = ctx.rng.randint(4, 8)
-        return _result(ctx, "vhs", "rewind",
-                       f"El VHS rebobinó a {name}. +{n} 🪙", "good", coinDelta={u.seat: n})
-
-    return _weighted(ctx.rng, ctx.bias, [
-        (26, "neutral", static),
-        (24, "neutral", shuffle),
-        (26, "info", glimpse),
-        (24, "good", rewind),
-    ])
-
-
-def _phone(ctx):
-    """Atender el telefono: mensaje privado (verdad/mentira/ruido). Sin efecto mecanico."""
-    u = ctx.user
-    line = ctx.phone_line()
-    return _result(ctx, "phone", "answer",
-                   f"{u.name} atendió el teléfono... y se quedó callado.", "info",
-                   phone={u.seat: line})
-
-
-def _smallbox(ctx):
-    u = ctx.user
-    name = u.name
-
-    def nested():
-        nxt = ctx.random_item_type()
-        return _result(ctx, "smallbox", "nested",
-                       f"📦 Dentro de la caja de {name} había otro objeto...", "weird",
-                       spawn=nxt)
-
-    def coins():
-        n = ctx.rng.randint(4, 8)
-        return _result(ctx, "smallbox", "coins",
-                       f"La caja de {name} tenía {n} 🪙", "good", coinDelta={u.seat: n})
-
-    def bomb():
-        return _result(ctx, "smallbox", "bomb",
-                       f"💥 Dentro de la caja de {name} había una bomba. −1 ❤", "bad",
-                       hpDelta={u.seat: -1})
-
-    return _weighted(ctx.rng, ctx.bias, [
-        (34, "neutral", nested),
-        (34, "good", coins),
-        (32, "bad", bomb),
-    ])
-
-
-_RESOLVERS = {
-    "radio": _radio,
-    "bomb": _bomb,
-    "coins": _coins,
-    "key": _key,
-    "syringe": _syringe,
-    "vhs": _vhs,
-    "phone": _phone,
-    "smallbox": _smallbox,
-}
-
-
-def resolve(item_type, ctx):
-    """Resuelve el efecto oculto de 'item_type' usando el contexto de la ronda."""
-    fn = _RESOLVERS.get(item_type, _coins)
-    return fn(ctx)
+    return result(f"{nm} usó {name(t)}.", "weird", emoji=emoji(t), name=name(t))

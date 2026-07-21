@@ -18,11 +18,13 @@ import mimetypes
 import os
 import struct
 import sys
+from urllib.parse import unquote
 
 from game.room import Hub
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PUBLIC = os.path.join(HERE, "public")
+ASSETS = os.path.join(HERE, "assets")  # modelos 3D del usuario (.glb) y texturas
 WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 hub = Hub()
@@ -117,15 +119,23 @@ class Conn:
 # --------------------------------------------------------------------------- #
 # HTTP estatico
 # --------------------------------------------------------------------------- #
+def _under(root, rel):
+    """Resuelve rel dentro de root, bloqueando escapes (path traversal)."""
+    full = os.path.join(root, rel)
+    if not os.path.abspath(full).startswith(os.path.abspath(root)):
+        return None
+    return full
+
+
 def safe_path(url_path):
-    url_path = url_path.split("?", 1)[0].split("#", 1)[0]
+    url_path = unquote(url_path.split("?", 1)[0].split("#", 1)[0])
     if url_path in ("/", ""):
         url_path = "/index.html"
     rel = os.path.normpath(url_path).lstrip("/\\")
-    full = os.path.join(PUBLIC, rel)
-    if not os.path.abspath(full).startswith(os.path.abspath(PUBLIC)):
-        return None
-    return full
+    # Los modelos 3D del usuario viven fuera de public/, en ./assets
+    if rel == "assets" or rel.startswith("assets" + os.sep):
+        return _under(ASSETS, rel[len("assets"):].lstrip("/\\"))
+    return _under(PUBLIC, rel)
 
 
 async def serve_static(writer, url_path):
@@ -141,6 +151,8 @@ async def serve_static(writer, url_path):
     ctype, _ = mimetypes.guess_type(full)
     if full.endswith((".js", ".mjs")):
         ctype = "text/javascript"
+    elif full.endswith(".glb"):
+        ctype = "model/gltf-binary"
     ctype = ctype or "application/octet-stream"
     with open(full, "rb") as f:
         body = f.read()

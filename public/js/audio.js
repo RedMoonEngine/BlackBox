@@ -90,6 +90,19 @@ export class Audio {
       case "push": this._beep(400, 0.12, "sine", 0.12, 180); break;
       case "click": this._beep(700, 0.03, "square", 0.1); break;
       case "coin": this._beep(880, 0.05, "square", 0.15); setTimeout(() => this._beep(1180, 0.07, "square", 0.13), 50); break;
+      case "spin":
+        for (let i = 0; i < 8; i++) setTimeout(() => this._beep(500 + i * 40, 0.04, "square", 0.08), i * 70);
+        break;
+      case "revolver": this._beep(1200, 0.02, "square", 0.18); setTimeout(() => this._beep(80, 0.05, "square", 0.12), 60); break;
+      case "casino": this._beep(200, 0.5, "sawtooth", 0.12, 420); this._noiseBurst(0.4, 0.08, 900); break;
+      case "gunshot":
+        this._noiseBurst(0.14, 0.7, 1600); this._beep(70, 0.22, "square", 0.5, 30);
+        setTimeout(() => this._noiseBurst(0.5, 0.12, 300), 40); // eco
+        break;
+      case "explosion":
+        this._noiseBurst(0.7, 0.8, 220); this._beep(50, 0.7, "sawtooth", 0.55, 24);
+        setTimeout(() => this._noiseBurst(0.5, 0.25, 500), 60);
+        break;
     }
   }
 

@@ -46,14 +46,21 @@ export class Net {
     }
   }
 
-  // helpers de accion
+  // helpers de accion (v2)
   join(room, name) { this.send({ t: "join", room, name }); }
   start() { this.send({ t: "start" }); }
-  use() { this.send({ t: "action", kind: "use" }); }
-  pushTo(seat) { this.send({ t: "action", kind: "pushTo", targetSeat: seat }); }
-  trash() { this.send({ t: "action", kind: "trash" }); }
-  reorder() { this.send({ t: "action", kind: "reorder" }); }
-  buy(id) { this.send({ t: "buy", id }); }
+  addBot() { this.send({ t: "addbot" }); }
+  removeBot() { this.send({ t: "removebot" }); }
+  bet(amount) { this.send({ t: "bet", amount }); }
   ready(v) { this.send({ t: "ready", value: v }); }
+  objOpen() { this.send({ t: "action", kind: "open" }); }
+  objPocket() { this.send({ t: "action", kind: "pocket" }); }
+  pushTo(seat) { this.send({ t: "action", kind: "pushTo", targetSeat: seat }); }
+  spin() { this.send({ t: "spin" }); }
+  roulettePull() { this.send({ t: "action", kind: "pull" }); }
+  rouletteStop() { this.send({ t: "action", kind: "stop" }); }
+  useObject(uid, target) { this.send({ t: "use", uid, target }); }
+  buy(id) { this.send({ t: "buy", id }); }
+  bid(amount) { this.send({ t: "bid", amount }); }
   again() { this.send({ t: "again" }); }
 }

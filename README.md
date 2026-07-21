@@ -3,16 +3,34 @@
 > "Una caja vieja encontrada en un depósito militar. Cada vez que alguien la abre,
 > alguien sale ganando... y otro no."
 
-Juego web **multiplayer** de deducción social y paranoia alrededor de una única mesa.
-Estética **PS1** (low-poly, oscuro, primera persona), **2 a 8 jugadores**. En el centro hay
-una caja negra que en cada ronda escupe objetos con **efectos ocultos**. Podés **abrir** un
-objeto... o **empujárselo a otro** mintiendo sobre lo que es. Nadie sabe qué hace realmente
-cada cosa. Las monedas compran mejoras. El **teléfono** te dice cosas — verdad o mentira,
-nunca sabés.
+Juego web **multiplayer** — **casino roguelike social** (terror + humor), estética **PS1**,
+primera persona, **2 a 6 jugadores** alrededor de una única mesa. En el centro está la **BlackBox**:
+una máquina con pantalla CRT que **controla todo**.
 
-Todo se sirve solo: **no hay que instalar nada** más que Python 3 (que ya trae la stdlib
-necesaria) y usar un navegador moderno. Los modelos 3D son **procedurales** (hechos en código,
-sin assets externos). Three.js viene vendorizado en `public/vendor/`.
+Cada ronda:
+1. Apostás **fichas** (a ciegas) al **pozo**.
+2. La BlackBox **gira** su ruleta y elige una **actividad**.
+3. Se juega esa actividad.
+4. Se reparten premios/castigos.
+5. Entre rondas, por 2 segundos, **se enciende el casino**: ves un salón de demonios jugando
+   alrededor... y vuelve la oscuridad.
+
+**Actividades** (props 3D animados, no menús):
+- 📦 **OBJETOS** — la caja escupe objetos; los **abrís** (¿bomba?), los **guardás** al inventario, o
+  se los **empujás** a otro mintiendo.
+- 🎰 **TRAGAPERRAS** — una tragaperras flota hacia vos; **tirás la palanca arrastrando el mouse**.
+- 🔫 **RULETA RUSA** — un revólver se te acerca; hacés **click en el gatillo** o te **plantás**.
+- 📼 **EVENTO** — pasa cualquier cosa (apagón, lluvia de fichas, un monstruo, subasta, y el raro
+  **EL DUEÑO** que detiene el casino).
+- 🛒 **MERCADO** — un **maletín cae del cielo** y se abre revelando objetos y **reliquias** en 3D.
+
+**Sistemas roguelike:** fichas, apuesta, **inventario** de consumibles (bomba, whisky, llave,
+jeringa, teléfono, imán, VHS…), **reliquias permanentes** (Ojo del Vidente, Diente de Oro, Cuernos
+de Satán, Mano del Tahúr, Máscara de los Horrores) y el **menace** ("el casino despierta"): cuanto
+más agresivos juegan, peores objetos y más eventos secretos.
+
+Todo es **procedural** (modelos 3D hechos en código, sin assets externos). No hay que instalar nada
+más que Python 3; Three.js viene vendorizado en `public/vendor/`.
 
 ## Correr
 
@@ -21,56 +39,37 @@ cd BlackBox
 python3 server.py
 ```
 
-Abrí **http://localhost:8080** en el navegador. Listo.
+Abrí **http://localhost:8080**. Dejá el código de sala vacío para **crear** una (te da un código de
+4 letras) o pegá el de un amigo para **unirte**. Con 2 a 6 jugadores, el anfitrión (★) toca
+**ABRIR LA CAJA**.
 
 - Otro puerto: `PORT=9000 python3 server.py`
-- Jugar con amigos:
-  - **Misma red / LAN:** compartiles `http://TU_IP_LOCAL:8080` (el server escucha en `0.0.0.0`).
-  - **Por internet:** exponé el puerto 8080 (port-forward del router, o un túnel tipo
-    `ssh -R`, `cloudflared`, `ngrok`, etc.).
-
-### Cómo jugar
-1. Escribí tu nombre. Dejá el **código de sala vacío** para crear una nueva (te da un código de
-   4 letras), o pegá el código de un amigo para unirte.
-2. Cuando estén **2 a 8**, el anfitrión (★) toca **ABRIR LA CAJA**.
-3. Cada ronda la caja escupe objetos misteriosos. Si te toca sostener uno:
-   - **ABRIR** (o **ATENDER** si es el teléfono) → se resuelve su efecto oculto.
-   - **EMPUJAR ▸** a otro jugador → que lo abra él (podés mentir sobre lo que es).
-   - **🗑 TIRAR** / **🔄 GIRAR** si compraste esas mejoras.
-4. Entre rondas: **mercado negro** para gastar 🪙 (👁 ver, 🧲 robar, 🗑 tirar, 🔄 girar, 💀 doble).
-5. La caja **crece** cada ronda y **aprende**: si todos juegan igual/pasivo, empeora los objetos;
-   si son agresivos, da más recompensas. Sube la **corrupción** y la mesa se enrarece.
-6. Último en pie gana. Empezás con 2 ❤; las bombas duelen.
+- Con amigos en la LAN: compartiles `http://TU_IP:8080`. Por internet: exponé el puerto (port-forward
+  o un túnel tipo `cloudflared`/`ngrok`).
 
 ## Tuneo (variables de entorno)
 
-| Var | Default | Qué hace |
-|-----|---------|----------|
-| `PORT` | `8080` | Puerto HTTP/WS |
-| `BB_CHOOSE_SECS` | `12` | Segundos para decidir por objeto |
-| `BB_RESOLVE_PAUSE` | `3` | Pausa tras revelar |
-| `BB_DEAL_PAUSE` | `2.2` | Pausa al repartir |
-| `BB_SHOP_SECS` | `22` | Duración de la tienda |
+`PORT` (8080) y los tiempos de fase: `BB_BET_SECS`, `BB_SPIN_SECS`, `BB_CHOOSE_SECS`,
+`BB_ROULETTE_SECS`, `BB_SLOTS_SECS`, `BB_EVENT_SECS`, `BB_MARKET_SECS`, `BB_RESOLVE_PAUSE`,
+`BB_CASINO_SECS`, `BB_ROUND_CAP`.
 
 ## Arquitectura
 
-- **`server.py`** — servidor autoritativo en **Python puro (solo stdlib)**: sirve el cliente
-  estático de `public/` y hace de servidor WebSocket (handshake + framing a mano) en `/ws`.
-- **`game/`** — lógica del juego (vive **solo en el server**; el efecto real de un objeto nunca
-  viaja al cliente antes de resolverse):
-  - `room.py` — salas, jugadores, ruteo de mensajes, reconexión básica.
-  - `engine.py` — máquina de estados de ronda (deal → elegir → resolver → pago → tienda → escala).
-  - `items.py` — catálogo de objetos y resolución de efectos **ocultos**.
-  - `ai_box.py` — RNG sembrada, generación de objetos y la heurística "la caja aprende".
-  - `protocol.py` — arma la **vista por-jugador** (no filtra información oculta).
-- **`public/`** — cliente estático (ES modules, sin build):
-  - `js/scene.js` `models.js` `items3d.js` `ps1.js` — escena Three.js + look PS1
-    (baja resolución + *vertex snapping* + niebla oscura).
-  - `js/ui.js` `net.js` `audio.js` `main.js` — HUD/tienda/teléfono, WebSocket, audio, orquestación.
+- **`server.py`** — servidor autoritativo en **Python puro (solo stdlib)**: sirve `public/` y hace de
+  servidor WebSocket (handshake + framing a mano) en `/ws`. Los efectos ocultos viven **solo** acá.
+- **`game/`** — lógica del juego:
+  - `room.py` (salas/jugadores/ruteo), `engine.py` (loop BET→SPIN→ACTIVIDAD→PAYOUT→CASINO + las 5
+    actividades + El Dueño), `items.py` (objetos y sus efectos), `ai_box.py` (ruleta de actividades,
+    tragaperras, eventos, menace), `relics.py` (reliquias con hooks), `protocol.py` (vista por-jugador).
+- **`public/`** — cliente Three.js sin build:
+  - `js/scene.js` `models.js` `items3d.js` — escena PS1 + **props 3D animados** (tragaperras con
+    palanca arrastrable, revólver con gatillo, maletín que cae y se abre, CRT animada, reveal del casino).
+  - `js/ui.js` `net.js` `audio.js` `main.js` — HUD/paneles, WebSocket, audio, orquestación.
   - `vendor/three.module.js` — Three.js r160 vendorizado (sin CDN).
 
 ## Estado
 
-v1 jugable: mesa, caja, 8 objetos con efectos ocultos, agarrar/empujar/abrir, monedas, tienda
-(5 mejoras), teléfono con voz distorsionada, "la caja aprende" y corrupción-lite.
-Pendiente (post-v1): VHS/TV en vivo, set completo de reglas de corrupción y mímicos, más objetos.
+v2 jugable: 5 actividades con props 3D animados, fichas/apuesta/pozo, inventario, 5 reliquias,
+menace, reveal del casino y El Dueño.
+Pendiente (post-v2): 🃏 PÓKER, 🕹 ARCADE, clickear objetos del maletín para comprar, más
+reliquias/objetos/eventos, persistencia, balance fino.

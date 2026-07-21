@@ -61,6 +61,13 @@ button.danger:hover{background:var(--red);color:#000}
 button.ghost{color:var(--ink-dim);border-color:var(--edge)}
 button.ghost:hover{background:var(--edge);color:#fff}
 
+.bot-controls{display:flex;gap:8px;margin:8px 0 2px}
+.bot-controls button{flex:1;padding:9px;background:#12120e;border:1px solid var(--edge);
+  color:var(--ink-dim);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;
+  transition:transform .05s}
+.bot-controls button:hover{background:var(--edge);color:#fff}
+.bot-controls button:active{transform:translateY(1px)}
+
 .room-code{font-size:1.1rem;letter-spacing:.2em;margin:4px 0}
 .room-code b{color:var(--amber);font-size:1.6rem}
 .seat-list{list-style:none;padding:0;margin:14px 0;display:flex;flex-wrap:wrap;gap:8px}
@@ -79,9 +86,26 @@ button.ghost:hover{background:var(--edge);color:#fff}
 .pill.corrupt b{color:var(--violet)}
 .hp{font-size:1.1rem;letter-spacing:2px}
 
-.phase-banner{position:absolute;top:44px;left:50%;transform:translateX(-50%);
-  color:var(--ink-dim);font-size:.8rem;letter-spacing:.25em;text-transform:uppercase;
-  text-shadow:0 0 6px #000}
+/* cartel central: SIEMPRE dice qué pasa y qué hacer (clave para entender el juego) */
+.phase-banner{position:absolute;top:40px;left:50%;transform:translateX(-50%);
+  width:max-content;max-width:min(92vw,660px);text-align:center;padding:8px 20px;
+  background:rgba(8,8,12,.72);border:1px solid var(--edge);box-shadow:0 0 0 2px #000;
+  pointer-events:none;z-index:11}
+.phase-banner .pb-title{display:block;font-size:.98rem;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink);text-shadow:0 0 8px #000}
+.phase-banner .pb-sub{display:block;margin-top:3px;font-size:.72rem;letter-spacing:.03em;
+  color:var(--ink-dim);line-height:1.35}
+.phase-banner.k-mine{border-color:var(--amber);background:rgba(26,19,6,.85);
+  animation:pbpulse 1.7s ease-in-out infinite}
+.phase-banner.k-mine .pb-title{color:var(--amber)}
+.phase-banner.k-mine .pb-sub{color:#d8cfa8}
+.phase-banner.k-weird{border-color:var(--violet)}
+.phase-banner.k-weird .pb-title{color:var(--violet)}
+.phase-banner.k-bad{border-color:var(--red);background:rgba(26,6,6,.85);
+  animation:pbpulse 1s ease-in-out infinite}
+.phase-banner.k-bad .pb-title{color:var(--red)}
+@keyframes pbpulse{0%,100%{box-shadow:0 0 0 2px #000,0 0 12px rgba(232,176,75,.18)}
+  50%{box-shadow:0 0 0 2px #000,0 0 22px rgba(232,176,75,.55)}}
 
 .action-panel{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
   width:min(560px,96vw);background:var(--panel);border:1px solid var(--amber);
@@ -178,8 +202,179 @@ button.open:hover{background:var(--green);color:#000}
 .tips{position:fixed;left:0;right:0;bottom:2px;z-index:7;text-align:center;font-size:.62rem;
   color:#4a463f;letter-spacing:.15em;pointer-events:none}
 
+/* ============ v2: paneles por actividad ============ */
+.panel-c{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);
+  width:min(560px,96vw);background:var(--panel);border:1px solid var(--amber);
+  padding:14px;box-shadow:0 0 0 3px #000;text-align:center;pointer-events:auto}
+.panel-h{letter-spacing:.16em;color:var(--amber);font-size:.9rem;margin-bottom:10px}
+.gtimer{position:relative;height:6px;background:#000;margin-top:12px;border:1px solid var(--edge)}
+.gtimer-bar{display:block;height:100%;width:100%;background:var(--amber);transition:width .12s linear}
+.gtimer-num{position:absolute;right:2px;top:-15px;font-size:.68rem;color:var(--ink-dim)}
+
+/* apuesta */
+.bet-row{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0}
+.bet-row2{display:flex;gap:8px}
+.bet-row2 .big{margin-top:6px}
+.stepper{background:#14140f;color:var(--amber);border:1px solid var(--amber);padding:8px 12px;cursor:pointer;font-size:.9rem}
+.stepper:hover{background:var(--amber);color:#000}
+.bet-amt{font-size:1.4rem;min-width:100px}
+.bet-amt b{color:var(--amber)}
+
+/* spin */
+.big-spin{font-size:1.4rem;letter-spacing:.25em;color:var(--amber);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.4}}
+
+/* slots */
+.big-reels{font-size:2.6rem;letter-spacing:.1em;margin:6px 0}
+.reels{letter-spacing:.05em}
+.slot-grid{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:.9rem;max-height:22vh;overflow:auto}
+.slot-row{display:flex;justify-content:center;gap:8px}
+
+/* ruleta */
+.revolver{font-size:1.8rem;letter-spacing:.15em;margin:6px 0}
+.rew{margin:6px 0}
+.rew b{color:var(--amber)}
+.rr-btns{display:flex;gap:10px;justify-content:center}
+.rr-btns .big{margin-top:6px}
+
+/* mercado compacto */
+.mkt-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+.mkt-item{display:flex;flex-direction:column;align-items:center;gap:2px;width:150px;
+  background:#0c0c0f;border:1px solid var(--edge);padding:8px 10px;cursor:pointer;color:var(--ink)}
+.mkt-item:hover:not(:disabled){border-color:var(--amber);background:#14140f}
+.mkt-item:disabled{opacity:.4;cursor:not-allowed}
+.mkt-item.relic{border-color:var(--violet)}
+.mkt-emo{font-size:1.6rem}
+.mkt-nm{font-size:.74rem;letter-spacing:.04em;font-weight:bold}
+.mkt-desc{font-size:.62rem;color:var(--ink-dim);line-height:1.25;text-align:center;min-height:2.4em}
+.mkt-cost{font-size:.72rem;color:var(--amber);margin-top:2px}
+.pull-hint{font-size:.82rem;color:var(--amber);margin-bottom:6px}
+
+/* evento */
+.event-banner-c{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);
+  width:min(520px,94vw);background:var(--panel);border:1px solid var(--violet);
+  padding:14px;text-align:center;box-shadow:0 0 0 3px #000;pointer-events:auto}
+.ev-banner{font-size:1.2rem;letter-spacing:.2em;color:var(--violet)}
+
+/* inventario / reliquias */
+.invbar{position:absolute;left:12px;top:56px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  max-width:60vw;pointer-events:auto}
+.inv-lbl{font-size:.6rem;color:var(--ink-dim);letter-spacing:.15em}
+.inv-item{width:40px;height:40px;font-size:1.3rem;background:rgba(10,10,12,.85);border:1px solid var(--edge);
+  cursor:pointer}
+.inv-item:hover{border-color:var(--amber);background:#14140f}
+.relicbar{position:absolute;right:12px;top:56px;display:flex;gap:5px;pointer-events:auto}
+.relic-item{font-size:1.3rem;background:rgba(24,16,28,.8);border:1px solid var(--violet);
+  padding:2px 5px;cursor:help;color:var(--violet)}
+.relic-item .ic{color:var(--violet)}
+.inv-item .ic{color:var(--amber)}
+
+/* casino reveal */
+.casino-ov{position:fixed;inset:0;z-index:8;display:flex;align-items:flex-start;justify-content:center;
+  pointer-events:none;padding-top:12vh}
+.casino-ov>div{color:var(--red);letter-spacing:.3em;font-size:1.1rem;text-shadow:0 0 12px #000;
+  animation:blink .4s steps(2) infinite}
+
+/* el dueño */
+.owner-ov{position:fixed;inset:0;z-index:42;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.75)}
+.owner-card{text-align:center;border:2px solid var(--red);padding:30px 44px;background:#0a0508;
+  box-shadow:0 0 0 4px #000,0 0 50px rgba(217,75,58,.4)}
+.owner-emo{font-size:4rem;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+#owner-text{margin-top:10px;letter-spacing:.14em;color:var(--red)}
+
+/* selector de objetivo */
+.target-ov{position:fixed;inset:0;z-index:44;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.6)}
+.target-card{width:min(360px,92vw);background:var(--panel);border:1px solid var(--amber);padding:18px;
+  display:flex;flex-direction:column;gap:6px}
+.target-card .big{margin-top:0}
+
+/* glitch (VHS) */
+body.glitching #gl{animation:glitchy .12s steps(2) infinite;filter:saturate(1.4)}
+body.glitching #crt{opacity:.9;animation:none;background:repeating-linear-gradient(0deg,#0000 0,#0000 1px,#d94b3a22 2px,#0000 3px)}
+@keyframes glitchy{0%{transform:translate(0)}50%{transform:translate(-3px,1px)}100%{transform:translate(2px,-1px)}}
+
+/* ============ iconos vectoriales ============ */
+.ic{display:inline-block;vertical-align:-0.14em}
+.hp .ic{color:var(--red)}
+.hp{color:var(--red)}
+.pill .ic,.coins .ic,.bet-title .ic{color:var(--amber)}
+.pill.act .ic{color:var(--ink)}
+.mkt-cost .ic,.rew .ic{color:var(--amber)}
+.inv-item,.relic-item{display:inline-flex;align-items:center;justify-content:center}
+.red{color:var(--red)}
+.reveal.good .reveal-emoji{color:var(--green)}
+.reveal.bad .reveal-emoji{color:var(--red)}
+.reveal.info .reveal-emoji{color:var(--blue)}
+.reveal.weird .reveal-emoji{color:var(--violet)}
+.go-card h1 .ic{font-size:3rem}
+
+/* ============ HUD de apuesta ============ */
+.bet-title{font-size:1.05rem;letter-spacing:.14em;color:var(--amber)}
+.bet-sub{font-size:.72rem;color:var(--ink-dim);margin:4px 0 8px}
+.bet-display{font-size:2.6rem;line-height:1;color:#fff;margin:2px 0 6px}
+.bet-num{color:var(--amber);font-weight:bold}
+.bet-cap{font-size:1rem;color:var(--ink-dim);letter-spacing:.05em}
+.bet-range{-webkit-appearance:none;appearance:none;width:100%;height:8px;margin:8px 0 4px;
+  background:#000;border:1px solid var(--edge);outline:none;cursor:pointer}
+.bet-range::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;background:var(--amber);
+  border:2px solid #000;cursor:grab}
+.bet-range::-moz-range-thumb{width:20px;height:20px;background:var(--amber);border:2px solid #000;cursor:grab}
+.bet-range::-moz-range-progress{background:var(--amber);height:8px}
+.bet-steps{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:8px 0}
+.bet-steps .stepper{min-width:46px;padding:8px 10px}
+.stepper.allin{color:var(--red);border-color:var(--red);font-weight:bold}
+.stepper.allin:hover{background:var(--red);color:#000}
+.bet-confirm{width:100%;margin-top:8px}
+.bet-confirm.ready{background:var(--green);color:#000;border-color:var(--green)}
+
+/* ============ tutorial ============ */
+.tut-btn{margin-top:10px}
+.tut-ov{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.82);padding:16px}
+.tut-card{width:min(560px,96vw);max-height:92vh;overflow:auto;background:var(--panel);
+  border:1px solid var(--amber);padding:22px 24px;box-shadow:0 0 0 3px #000,0 20px 60px rgba(0,0,0,.7)}
+.tut-card h2{margin:0 0 6px;letter-spacing:.16em;color:#fff;text-shadow:2px 2px 0 var(--red),-2px 0 0 var(--blue)}
+.tut-card h3{margin:18px 0 8px;color:var(--amber);letter-spacing:.12em;font-size:.9rem;
+  border-bottom:1px solid var(--edge);padding-bottom:4px}
+.tut-intro{font-size:.84rem;line-height:1.5;color:var(--ink)}
+.tut-loop{margin:0;padding-left:18px;font-size:.82rem;line-height:1.6}
+.tut-loop .ic{color:var(--amber)}
+.tut-row{display:flex;gap:12px;align-items:flex-start;margin:10px 0;font-size:.84rem;line-height:1.4}
+.tut-ic{flex:0 0 34px;height:34px;display:flex;align-items:center;justify-content:center;
+  font-size:1.5rem;color:var(--amber);background:#0c0c0f;border:1px solid var(--edge)}
+.tut-row b{color:#fff}
+.tut-warn{margin-top:16px;font-size:.8rem;line-height:1.5;color:var(--ink);
+  background:rgba(24,16,28,.6);border-left:2px solid var(--violet);padding:8px 10px}
+.tut-warn .ic{color:var(--violet);vertical-align:-.14em}
+#tut-close{width:100%;margin-top:16px}
+
+/* ============ efectos: sangre y fogonazo ============ */
+.fx-blood{position:fixed;inset:0;z-index:47;pointer-events:none;opacity:0;mix-blend-mode:multiply;
+  background:
+   radial-gradient(circle at 18% 28%,rgba(150,8,8,.95) 0,transparent 13%),
+   radial-gradient(circle at 76% 22%,rgba(120,4,4,.9) 0,transparent 15%),
+   radial-gradient(circle at 48% 72%,rgba(150,14,14,.85) 0,transparent 17%),
+   radial-gradient(circle at 88% 66%,rgba(110,0,0,.85) 0,transparent 11%),
+   radial-gradient(circle at 8% 82%,rgba(130,10,10,.85) 0,transparent 13%),
+   radial-gradient(circle at 62% 40%,rgba(90,0,0,.7) 0,transparent 9%)}
+.fx-blood.show{animation:blood 1.4s ease-out}
+@keyframes blood{0%{opacity:0}9%{opacity:1}70%{opacity:.85}100%{opacity:0}}
+.fx-flash{position:fixed;inset:0;z-index:46;pointer-events:none;opacity:0;
+  background:radial-gradient(circle at 50% 46%,#fff6e0,#ff8a2a 38%,transparent 72%)}
+.fx-flash.show{animation:flashfx .45s ease-out}
+@keyframes flashfx{0%{opacity:0}7%{opacity:.9}100%{opacity:0}}
+
 @media (max-width:560px){
   .logo{font-size:1.5rem}
   .log{width:44vw;font-size:.64rem}
-  .hints{width:44vw;font-size:.64rem}
+  .hints{width:44vw;font-size:.64rem;bottom:auto;top:104px}
+  .relicbar{top:auto;bottom:12px}
+  .invbar{max-width:96vw}
+  .big-reels{font-size:1.8rem}
+  .phase-banner{top:74px;max-width:96vw;padding:6px 12px}
+  .phase-banner .pb-title{font-size:.82rem;letter-spacing:.12em}
+  .phase-banner .pb-sub{font-size:.64rem}
 }

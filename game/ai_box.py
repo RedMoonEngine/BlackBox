@@ -1,38 +1,50 @@
-"""La caja: RNG sembrada, generacion de objetos y la heuristica 'la caja aprende'.
+"""La BlackBox: elige la actividad de cada ronda y controla el 'menace' del casino.
 
-La caja tiene una IA muy simple: mira como juega la sala.
-  - Si todos empujan/dudan mucho (sala pasiva y repetitiva) -> sesga hacia PEORES objetos.
-  - Si todos abren/usan rapido (sala agresiva)             -> sesga hacia MAS recompensas.
-Ese sesgo (bias) lo consumen los resolvers de items.py.
+menace = cuán despierto está el casino. Sube con juego agresivo, combos de tragaperras y ciertos
+eventos. A mayor menace: ruleta más letal, más eventos secretos, reveal del casino más siniestro,
+y se habilita El Dueño.
 """
 
 import random
 
 from . import items
 
-# Frases del telefono. {p} = referencia a otro jugador. Mezcla verdad / mentira / ruido.
-# El engine elige y rellena; el jugador NUNCA sabe si es verdad.
+ACTIVITIES = ["OBJETOS", "SLOTS", "ROULETTE", "EVENT", "MARKET"]
+ACT_META = {
+    "OBJETOS":  ("📦", "OBJETOS"),
+    "SLOTS":    ("🎰", "TRAGAPERRAS"),
+    "ROULETTE": ("🔫", "RULETA RUSA"),
+    "EVENT":    ("📼", "EVENTO"),
+    "MARKET":   ("🛒", "MERCADO"),
+}
+
+# tragaperras
+SLOT_SYMBOLS = ["🍒", "🔔", "⭐", "🎰", "💀", "📦", "👁"]
+SLOT_WEIGHTS = [26, 22, 16, 8, 12, 10, 6]
+
+# eventos rápidos (ocurren y terminan) — se muestran con un cartel (reveal)
+EVENTS_NORMAL = ["tax", "chip_rain", "bombing", "chaos", "sabotage", "swap_inv", "jackpot"]
+# eventos secretos (requieren menace): El Dueño y la subasta
+EVENTS_SECRET = ["owner", "auction"]
+
 PHONE_TEMPLATES = [
     "{p} está mintiendo.",
-    "No abras la próxima caja.",
+    "No apuestes esta ronda.",
     "Uno de ustedes ya está muerto.",
-    "El próximo objeto es una bomba.",
-    "Confiá en {p}. Es lo único que te queda.",
+    "El próximo giro es una bomba.",
+    "Confiá en {p}.",
     "La caja te eligió.",
-    "Pasá el siguiente objeto. No lo abras vos.",
+    "Guardá el próximo objeto. No lo abras.",
     "{p} sabe algo que vos no.",
-    "Quedan menos de los que pensás.",
-    "El teléfono volverá a sonar. No atiendas.",
-    "Mentiles a todos en la próxima ronda.",
-    "Hay monedas escondidas para el que abra primero.",
+    "El Dueño está mirando.",
     "...(sólo estática)...",
-    "El que te pasó esto quería verte explotar.",
+    "Robale a {p} mientras puedas.",
+    "Hay fichas para el que se anime primero.",
 ]
 
-# Plantillas de hint privado (revelar info sobre otro jugador).
 HINT_TEMPLATES = [
-    "{p} tiene {hp} ❤ y {coins} 🪙.",
-    "{p} es quien más monedas tiene ahora mismo.",
+    "{p} tiene {hp} ❤ y {chips} fichas.",
+    "{p} es quien más fichas tiene.",
     "{p} está al borde: le queda 1 ❤.",
     "Vigilá a {p}.",
 ]
@@ -41,55 +53,87 @@ HINT_TEMPLATES = [
 class BoxAI:
     def __init__(self, seed=None):
         self.rng = random.Random(seed)
-        self.uses = 0          # objetos abiertos/usados
-        self.pushes = 0        # objetos empujados a otro
-        self.actions_by_seat = {}  # seat -> [kinds] para medir 'todos juegan igual'
+        self.menace = 0
+        self.aggr = 0      # acciones agresivas acumuladas
+        self.passive = 0   # acciones pasivas
+        self.pending_bombs = 0   # bombas extra que mete el evento "Bombardeo"
 
-    # -- registro de comportamiento ------------------------------------------
-    def record(self, seat, kind):
-        if kind == "use":
-            self.uses += 1
-        elif kind == "pushTo":
-            self.pushes += 1
-        self.actions_by_seat.setdefault(seat, []).append(kind)
+    def record(self, kind):
+        if kind in ("open", "pushTo", "pull", "use_offense", "spin"):
+            self.aggr += 1
+        elif kind in ("pocket", "stop", "skip"):
+            self.passive += 1
 
-    def bias(self):
-        """Devuelve el sesgo en [-0.6, 0.6]. + = mas recompensas, - = peor."""
-        total = self.uses + self.pushes
-        if total < 3:
-            return 0.0
-        aggression = self.uses / total  # 0 (todo pasivo) .. 1 (todo agresivo)
-        b = (aggression - 0.5) * 1.2
-        # penalizacion extra si TODOS juegan igual (poca variedad global)
-        if total >= 6:
-            all_kinds = [k for ks in self.actions_by_seat.values() for k in ks]
-            share_use = sum(1 for k in all_kinds if k == "use") / len(all_kinds)
-            if share_use < 0.15 or share_use > 0.85:  # monotono
-                b -= 0.15
-        return max(-0.6, min(0.6, b))
+    def bump_menace(self, n=1):
+        self.menace = max(0, self.menace + n)
 
-    # -- generacion de objetos -----------------------------------------------
-    def _pool_for_round(self, round_no):
-        key = min(3, max(1, round_no))
-        return items.UNLOCK_BY_ROUND[key]
+    def tick_menace(self):
+        # el casino se despierta lento con el juego agresivo
+        if self.aggr - self.passive > 4:
+            self.bump_menace(1)
+            self.aggr = self.passive = 0
 
-    def random_item_type(self, round_no):
-        return self.rng.choice(self._pool_for_round(round_no))
+    # -- elegir actividad ----------------------------------------------------
+    def pick_activity(self, round_no, last):
+        if round_no == 1:
+            return "OBJETOS"
+        m = self.menace
+        weights = {
+            "OBJETOS": 26,
+            "SLOTS": 22 + m,
+            "ROULETTE": 8 + m * 2,
+            "EVENT": 20 + m,
+            "MARKET": 16,
+        }
+        # cada 3-4 rondas empujar MERCADO para que puedan gastar
+        if round_no % 4 == 0:
+            weights["MARKET"] += 24
+        if last in weights:
+            weights[last] = max(3, weights[last] * 0.35)  # anti-repetición
+        acts = list(weights.keys())
+        w = [weights[a] for a in acts]
+        return self.rng.choices(acts, weights=w, k=1)[0]
 
-    def generate_round(self, round_no, count):
-        """Lista de tipos de objeto para la ronda. La caja crece: mas objetos por ronda."""
-        pool = self._pool_for_round(round_no)
-        b = self.bias()
-        # con sesgo negativo, aparecen mas bombas; con positivo, mas monedas.
-        weights = []
-        for t in pool:
-            w = 1.0
-            if t in ("bomb",):
-                w = max(0.2, 1.0 - b * 1.2)
-            elif t in ("coins", "syringe", "key"):
-                w = max(0.2, 1.0 + b * 0.8)
-            weights.append(w)
+    # -- objetos de la ronda OBJETOS -----------------------------------------
+    def spawn_objects(self, round_no, count):
         out = []
+        # bombas extra del evento "Bombardeo"
+        for _ in range(self.pending_bombs):
+            out.append("bomba")
+        self.pending_bombs = 0
+        danger_p = min(0.5, 0.2 + self.menace * 0.03)
         for _ in range(count):
-            out.append(self.rng.choices(pool, weights=weights, k=1)[0])
+            if self.rng.random() < danger_p:
+                out.append(self.rng.choice(items.DANGER_POOL))
+            else:
+                out.append(self.rng.choice(items.LOOT_POOL))
+        self.rng.shuffle(out)
         return out
+
+    # -- tragaperras ---------------------------------------------------------
+    def spin_reels(self):
+        return [self.rng.choices(SLOT_SYMBOLS, weights=SLOT_WEIGHTS, k=1)[0] for _ in range(3)]
+
+    # -- eventos -------------------------------------------------------------
+    def pick_event(self):
+        pool = list(EVENTS_NORMAL)
+        if self.menace >= 4 and self.rng.random() < min(0.5, 0.12 + self.menace * 0.03):
+            pool = EVENTS_SECRET + pool
+        return self.rng.choice(pool)
+
+    # -- stock de mercado ----------------------------------------------------
+    def market_stock(self):
+        stock = []
+        objs = self.rng.sample(items.LOOT_POOL, k=3)
+        for o in objs:
+            stock.append({"kind": "object", "id": o, "emoji": items.emoji(o),
+                          "name": items.name(o), "cost": self.rng.choice([6, 8, 10]),
+                          "desc": items.OBJECTS.get(o, {}).get("desc", "")})
+        # a veces una reliquia
+        from . import relics
+        if self.rng.random() < 0.6:
+            rid = self.rng.choice(relics.RELIC_IDS)
+            m = relics.meta(rid)
+            stock.append({"kind": "relic", "id": rid, "emoji": m["emoji"],
+                          "name": m["name"], "cost": self.rng.choice([22, 28, 34]), "desc": m["desc"]})
+        return stock

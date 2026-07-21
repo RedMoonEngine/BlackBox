@@ -10,11 +10,18 @@ const audio = new Audio();
 const net = new Net(onMsg, onOpen, onClose);
 const ui = new UI(net, audio);
 
-// cuando la UI muestra un reveal, tambien lo sacamos en 3D sobre la caja
-ui.onReveal3D = (face, tone) => scene.reveal(face, tone);
+// interacciones 3D -> red
+scene.onSpin = () => { audio.sfx("spin"); net.spin(); };
+scene.onPull = () => { audio.sfx("revolver"); net.roulettePull(); };
+scene.onUseItem = (uid) => ui.useObjectByUid(uid);
 
 let lastPhase = null;
 let haveState = false;
+
+function glitch(secs) {
+  document.body.classList.add("glitching");
+  setTimeout(() => document.body.classList.remove("glitching"), (secs || 3) * 1000);
+}
 
 function onMsg(msg) {
   switch (msg.t) {
@@ -26,15 +33,24 @@ function onMsg(msg) {
       ui.update(msg);
       scene.update(msg);
       if (msg.phase !== lastPhase) {
-        if (msg.phase === "DEAL") audio.sfx("deal");
+        if (msg.phase === "SPIN") audio.sfx("spin");
+        else if (msg.phase === "CASINO") audio.sfx("casino");
+        else if (msg.phase === "OBJETOS" || msg.phase === "SLOTS") audio.sfx("deal");
         lastPhase = msg.phase;
       }
       break;
     case "reveal":
       ui.reveal(msg.reveals);
+      for (const r of msg.reveals || []) {
+        if (r.name === "Ruleta" && r.tone === "bad") { scene.revolverBang(); audio.sfx("gunshot"); ui.fxBlood(); }
+        if ((r.name === "Bomba" || r.name === "Dinamita") && r.tone === "bad") { scene.explode(); audio.sfx("explosion"); ui.fxFlash(); }
+      }
       break;
     case "phone":
       ui.phone(msg.line);
+      break;
+    case "glitch":
+      glitch(msg.secs);
       break;
     case "error":
       ui.showError(msg.msg);
@@ -57,12 +73,13 @@ net.connect();
 
 // tips rotativos abajo
 const TIPS = [
-  "empujá el objeto… o abrilo vos. nadie sabe qué hace.",
+  "apostás a ciegas… la ruleta decide a qué jugás.",
   "el teléfono nunca dice del todo la verdad.",
-  "si todos juegan igual, la caja aprende y empeora.",
-  "las monedas compran ojos, imanes y sorpresas.",
+  "guardá objetos y usalos en el peor momento del otro.",
+  "las reliquias son para siempre y cambian las reglas.",
   '"tomá, encontré plata." — capaz era una bomba.',
-  "la caja crece cada ronda. abre más compartimentos.",
+  "cuanto más agresivos, más se despierta el casino.",
+  "entre rondas, mirá bien: el casino te observa.",
 ];
 let tipI = 0;
 const tipsEl = document.getElementById("tips");
