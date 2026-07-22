@@ -53,6 +53,9 @@ function onMsg(msg) {
       audio.sfx("scare");
       ui.jumpscare(msg);
       break;
+    case "tarot":
+      ui.tarot(msg.cards || []);
+      break;
     case "glitch":
       glitch(msg.secs);
       break;

@@ -380,8 +380,45 @@ body.glitching #crt{opacity:.9;animation:none;background:repeating-linear-gradie
 @keyframes scareShake{0%{transform:translate(-13px,7px) scale(1.02)}
   50%{transform:translate(11px,-9px) scale(1.07)}100%{transform:translate(-7px,11px) scale(1.0)}}
 
+/* ============ Cartas del Tarot ============ */
+/* mazo compartido (qué queda) */
+.tarotbar{position:absolute;right:12px;top:92px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;
+  max-width:46vw;justify-content:flex-end;pointer-events:auto}
+.td-lbl{font-size:.56rem;letter-spacing:.15em;color:var(--ink-dim)}
+.td-card{font-size:.95rem;background:rgba(24,16,28,.78);border:1px solid var(--edge);
+  padding:1px 4px;line-height:1.25}
+/* reliquia ACTIVA (tocá para robar) */
+.tarot-relic{cursor:pointer;color:var(--amber);border-color:var(--amber)}
+.tarot-relic.usable{box-shadow:0 0 10px rgba(232,176,75,.55);animation:pbpulse 1.6s ease-in-out infinite}
+.tarot-relic:disabled{opacity:.5;cursor:default;filter:grayscale(.4)}
+/* cinemática de la carta revelada */
+.tarot-ov{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;opacity:0;transition:opacity .3s;
+  background:radial-gradient(circle at 50% 45%,rgba(30,10,42,.86),rgba(0,0,0,.95))}
+.tarot-ov.show{opacity:1}
+.tarot-ov.bad{background:radial-gradient(circle at 50% 45%,rgba(52,6,8,.9),rgba(0,0,0,.96))}
+.tarot-stage{text-align:center}
+.tarot-img{width:min(46vh,300px);max-width:82vw;border-radius:10px;display:block;margin:0 auto 14px;
+  box-shadow:0 0 0 2px #000,0 0 40px rgba(232,176,75,.35),0 20px 60px rgba(0,0,0,.7);opacity:0}
+.tarot-ov.show .tarot-img{animation:tarotIn 1s cubic-bezier(.2,.9,.25,1) forwards}
+@keyframes tarotIn{0%{transform:translateY(-46px) rotateY(560deg) scale(.35);opacity:0}
+  60%{opacity:1}100%{transform:translateY(0) rotateY(0) scale(1);opacity:1}}
+.tarot-noimg{display:flex;align-items:center;justify-content:center;width:min(34vh,230px);height:min(46vh,300px);
+  font-size:16vh;background:#140a1e;border:2px solid var(--amber);margin:0 auto 14px}
+.tarot-name{font-size:1.5rem;letter-spacing:.22em;color:#fff;text-shadow:0 0 14px #000;opacity:0}
+.tarot-quote{font-style:italic;color:var(--amber);margin:6px 0;font-size:.95rem;opacity:0}
+.tarot-effect{color:var(--ink);font-size:.92rem;max-width:70vw;margin:0 auto;opacity:0;line-height:1.4}
+.tarot-ov.show .tarot-name{animation:tarotText .5s ease-out .72s forwards}
+.tarot-ov.show .tarot-quote{animation:tarotText .5s ease-out .95s forwards}
+.tarot-ov.show .tarot-effect{animation:tarotText .5s ease-out 1.15s forwards}
+@keyframes tarotText{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.tarot-ov.good .tarot-img{box-shadow:0 0 0 2px #000,0 0 44px rgba(123,209,106,.5),0 20px 60px rgba(0,0,0,.7)}
+.tarot-ov.bad .tarot-img{box-shadow:0 0 0 2px #000,0 0 48px rgba(217,75,58,.6),0 20px 60px rgba(0,0,0,.7)}
+
 @media (max-width:560px){
   .logo{font-size:1.5rem}
+  .tarotbar{top:auto;bottom:44px;max-width:96vw;justify-content:center}
+  .tarot-name{font-size:1.1rem}
   .log{width:44vw;font-size:.64rem}
   .hints{width:44vw;font-size:.64rem;bottom:auto;top:104px}
   .relicbar{top:auto;bottom:12px}

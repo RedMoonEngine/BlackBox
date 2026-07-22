@@ -16,9 +16,15 @@ RELICS = {
                 "desc": "Los demás no ven tus fichas ni tu inventario."},
     "muneca": {"emoji": "🪆", "name": "Muñeca Maldita",
                "desc": "Se sienta a tu lado y vigila. En el turno de OTRO puede pegarle un susto y robarle una reliquia al azar."},
+    "tarot": {"emoji": "🃏", "name": "Cartas del Tarot",
+              "desc": "USALA para robar una carta de un MAZO compartido y finito. El destino siempre cobra su deuda."},
+    # Maldición permanente que SÓLO reparte THE DEVIL — no aparece en los pools.
+    "maldito": {"emoji": "🔥", "name": "Maldición del Diablo",
+                "desc": "El precio del Diablo: −3 fichas al empezar cada ronda. No la pediste."},
 }
 
-RELIC_IDS = list(RELICS.keys())
+# Reliquias OBTENIBLES al azar (slots/subasta/dueño/mercado). 'maldito' queda afuera.
+RELIC_IDS = [k for k in RELICS if k != "maldito"]
 
 
 def has(player, relic_id):
@@ -31,8 +37,13 @@ def meta(relic_id):
 
 # -- hooks ---------------------------------------------------------------------
 def round_income(player):
-    """Fichas pasivas al empezar la ronda."""
-    return 3 if has(player, "diente") else 0
+    """Fichas (o penalización) al empezar la ronda."""
+    inc = 0
+    if has(player, "diente"):
+        inc += 3
+    if has(player, "maldito"):
+        inc -= 3        # el precio del Diablo
+    return inc
 
 
 def damage_taken(player, base):

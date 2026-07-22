@@ -35,13 +35,20 @@ def _inv_list(inv):
 
 
 def build_state(room, viewer):
-    sees_all = relics.sees_all(viewer)
+    # THE HERMIT revela toda la info oculta esta ronda; THE MOON la oculta a todos
+    # (y anula el Ojo). MOON tiene prioridad sobre HERMIT/Ojo.
+    reveal_all = getattr(room, "tarot_reveal_round", -1) == room.round
+    blind_all = getattr(room, "tarot_blind_round", -1) == room.round
+    sees_all = (relics.sees_all(viewer) or reveal_all) and not blind_all
     cur = room.current
 
     seats = []
     for s in sorted(room.players):
         p = room.players[s]
-        hide = relics.hides_info(p) and p.seat != viewer.seat and not sees_all
+        if blind_all:
+            hide = p.seat != viewer.seat
+        else:
+            hide = relics.hides_info(p) and p.seat != viewer.seat and not sees_all
         seats.append({
             "seat": p.seat, "name": p.name, "alive": p.alive, "hp": p.hp,
             "chips": None if hide else p.chips,
@@ -60,10 +67,10 @@ def build_state(room, viewer):
 
     current = None
     if cur:
-        # objeto CERRADO: nadie ve qué es hasta que alguien lo ABRE (se revela al resolver).
-        current = {"holderSeat": cur["holder_seat"],
-                   "face": {"type": "?", "emoji": "❔", "name": "Objeto sin abrir"},
-                   "blind": True, "pushesLeft": cur["pushes_left"],
+        # objeto CERRADO: nadie ve qué es… salvo con THE HERMIT (revela la trampa).
+        face = _face(cur["otype"]) if reveal_all else {"type": "?", "emoji": "❔", "name": "Objeto sin abrir"}
+        current = {"holderSeat": cur["holder_seat"], "face": face, "blind": not reveal_all,
+                   "pushesLeft": cur["pushes_left"],
                    "timerMs": _ms(cur.get("timer_end")), "itemsLeft": cur["items_left"]}
 
     slots = None
@@ -101,11 +108,18 @@ def build_state(room, viewer):
                              and viewer.alive),
         "canSpin": bool(room.phase == "SLOTS" and viewer.alive and not viewer.slot_done),
         "myReels": (room.slots["results"].get(viewer.seat) if room.slots else None),
+        "tarotUsable": bool(getattr(room, "tarot_deck", None)
+                            and relics.has(viewer, "tarot") and viewer.alive
+                            and getattr(viewer, "tarot_used_round", -1) != room.round
+                            and room.phase not in ("SPIN", "CASINO", "GAMEOVER", "LOBBY")),
     }
+
+    tarot_deck = getattr(room, "tarot_deck", None)
+    tarot_state = {"remaining": list(tarot_deck)} if tarot_deck is not None else None
 
     return {
         "t": "state", "code": room.code, "phase": room.phase, "round": room.round,
-        "roundCap": getattr(room, "round_cap", None),
+        "roundCap": getattr(room, "round_cap", None), "tarot": tarot_state,
         "menace": room.box.menace if room.box else 0, "pot": room.pot, "betCap": room.bet_cap,
         "betTimerMs": _ms(getattr(room, "bet_end", None)) if room.phase == "BET" else None,
         "hostSeat": room.host_seat, "started": room.started, "activity": room.activity,

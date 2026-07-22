@@ -8,7 +8,7 @@ import asyncio
 import os
 import time
 
-from . import ai_box, items, relics
+from . import ai_box, items, relics, tarot
 
 
 def _envf(name, default):
@@ -82,6 +82,10 @@ class GameLoop:
         self.box = ai_box.BoxAI(seed)
         self.started = True
         self.round_cap = ROUND_CAP
+        # mazo del Tarot COMPARTIDO para toda la partida + flags de ronda
+        self.tarot_deck = tarot.new_deck(self.box.rng)
+        self.tarot_reveal_round = -1   # THE HERMIT: revela todo esta ronda
+        self.tarot_blind_round = -1    # THE MOON: nadie ve nada esta ronda
         self.round = 0
         self.pot = 0
         self.activity = None
@@ -119,11 +123,11 @@ class GameLoop:
     async def play_round(self):
         self.round += 1
         self.box.tick_menace()
-        # ingreso pasivo de reliquias
+        # ingreso (o penalización) pasivo de reliquias
         for p in self.alive_players():
             inc = relics.round_income(p)
             if inc:
-                p.chips += inc
+                p.chips = max(0, p.chips + inc)
 
         await self.bet_phase()
         await self.spin_phase()
@@ -846,6 +850,144 @@ class GameLoop:
             else:
                 self.add_log(f"🪆 La Muñeca de {owner.name} clavó los ojos en {victim.name}. Un escalofrío.")
             break   # una sola muñeca actúa por turno
+
+    # ------------- CARTAS DEL TAROT -------------
+    def use_tarot(self, player):
+        """Usar la reliquia Cartas del Tarot: robar del MAZO compartido (1 vez/ronda)."""
+        if self.phase in ("SPIN", "CASINO", "GAMEOVER", "LOBBY"):
+            return
+        if not player.alive or not relics.has(player, "tarot"):
+            return
+        if getattr(player, "tarot_used_round", -1) == self.round:
+            return
+        player.tarot_used_round = self.round
+        asyncio.create_task(self._tarot_run(player))
+
+    async def _tarot_run(self, player):
+        reveals = []
+        if not getattr(self, "tarot_deck", None):
+            reveals.append({"id": "empty", "emoji": "🃏", "name": "MAZO VACÍO",
+                            "quote": "El destino ya cobró todas sus deudas.",
+                            "effect": "No quedan cartas.", "tone": "weird", "img": "",
+                            "log": f"🃏 {player.name} fue por una carta, pero el mazo está vacío."})
+        else:
+            guard = 0
+            while self.tarot_deck and guard < 20:
+                guard += 1
+                cid = self.tarot_deck.pop(self.box.rng.randrange(len(self.tarot_deck)))
+                reveals.append(self._tarot_apply(cid, player))
+                if cid != "star":
+                    break
+        # por si algún efecto (fool) bajó vidas a 0
+        for p in list(self.players.values()):
+            if p.alive and p.hp <= 0:
+                p.alive = False
+                self.add_log(f"☠ {p.name} quedó fuera.")
+        for r in reveals:
+            if r.get("log"):
+                self.add_log(r["log"])
+        await self._broadcast_tarot(reveals)
+        await self.broadcast()
+
+    def _tarot_apply(self, cid, player):
+        m = tarot.meta(cid)
+        rng = self.box.rng
+        rev = {"id": cid, "emoji": m["emoji"], "name": m["name"], "quote": m["quote"],
+               "effect": m["effect"], "tone": m["tone"], "img": m["img"], "log": ""}
+        nm = player.name
+        if cid == "sun":
+            player.hp = items.MAX_HP
+            n = rng.randint(8, 16); player.chips += n
+            rev["log"] = f"☀️ THE SUN: {nm} recupera toda la vida y +{n} fichas."
+        elif cid == "emperor":
+            gain = player.chips; player.chips += gain
+            rev["log"] = f"👑 THE EMPEROR: {nm} duplica sus fichas (+{gain})."
+        elif cid == "death":
+            others = [p for p in self.alive_players() if p.seat != player.seat and p.relics]
+            if others:
+                v = max(others, key=lambda p: len(p.relics))
+                rid = rng.choice(v.relics); v.relics.remove(rid); mr = relics.meta(rid)
+                rev["log"] = f"💀 THE DEATH: {v.name} pierde {mr['name']} {mr['emoji']}."
+            else:
+                rev["log"] = "💀 THE DEATH vino… y no encontró reliquias que llevarse."
+        elif cid == "hermit":
+            self.tarot_reveal_round = self.round
+            rev["log"] = "🧙 THE HERMIT: toda la info oculta queda a la vista esta ronda."
+        elif cid == "moon":
+            self.tarot_blind_round = self.round
+            rev["log"] = "🌙 THE MOON: esta ronda nadie ve nada… ni el Ojo del Vidente."
+        elif cid == "fool":
+            self._tarot_fool(rev)
+        elif cid == "wheel":
+            self._tarot_wheel(rev)
+        elif cid == "devil":
+            self._tarot_devil(player, rev)
+        elif cid == "star":
+            rev["log"] = f"⭐ THE STAR: {nm} roba otra carta…"
+        return rev
+
+    def _tarot_fool(self, rev):
+        rng = self.box.rng
+        parts = []
+        for p in self.alive_players():
+            roll = rng.randint(1, 6)
+            if roll == 1:
+                p.hp = max(0, p.hp - 1); parts.append(f"{p.name}−1❤")
+            elif roll == 2:
+                loss = min(p.chips, rng.randint(5, 12)); p.chips -= loss; parts.append(f"{p.name}−{loss}")
+            elif roll == 3:
+                g = rng.randint(6, 14); p.chips += g; parts.append(f"{p.name}+{g}")
+            elif roll == 4:
+                p.hp = min(items.MAX_HP, p.hp + 1); parts.append(f"{p.name}+1❤")
+            elif roll == 5:
+                it = rng.choice(items.LOOT_POOL); self._give(p, it); parts.append(f"{p.name}{items.emoji(it)}")
+            else:
+                parts.append(f"{p.name}—")
+        self.box.bump_menace(1)
+        rev["log"] = "🤡 THE FOOL: " + " · ".join(parts)
+
+    def _tarot_wheel(self, rev):
+        alive = self.alive_players()
+        if len(alive) < 2:
+            rev["log"] = "🎡 WHEEL: no había con quién intercambiar."
+            return
+        takes = [int(p.chips * 0.4) for p in alive]
+        for p, t in zip(alive, takes):
+            p.chips -= t
+        for i, p in enumerate(alive):
+            alive[(i + 1) % len(alive)].chips += takes[i]
+        invs = [p.inventory for p in alive]
+        invs = invs[-1:] + invs[:-1]
+        for p, inv in zip(alive, invs):
+            p.inventory = inv
+        rev["log"] = "🎡 WHEEL OF FORTUNE: fichas y objetos cambiaron de manos."
+
+    def _tarot_devil(self, player, rev):
+        rng = self.box.rng
+        roll = rng.random()
+        if roll < 0.5:
+            n = rng.randint(35, 70); player.chips += n; reward = f"+{n} fichas"
+        elif roll < 0.8:
+            pool = [r for r in relics.RELIC_IDS if r not in player.relics]
+            if pool:
+                rid = rng.choice(pool); self._give_relic(player, rid); mr = relics.meta(rid)
+                reward = f"la reliquia {mr['name']} {mr['emoji']}"
+            else:
+                n = rng.randint(40, 70); player.chips += n; reward = f"+{n} fichas"
+        else:
+            it = rng.choice(items.TOOL_POOL); self._give(player, it)
+            reward = f"{items.name(it)} {items.emoji(it)}"
+        if "maldito" not in player.relics:
+            player.relics.append("maldito")
+        rev["log"] = f"😈 THE DEVIL: {player.name} recibe {reward}… y una MALDICIÓN permanente 🔥."
+
+    async def _broadcast_tarot(self, reveals):
+        payload = [{"id": r["id"], "emoji": r["emoji"], "name": r["name"], "quote": r["quote"],
+                    "effect": r["effect"], "tone": r["tone"], "img": r["img"]} for r in reveals]
+        tasks = [p.conn.send({"t": "tarot", "cards": payload})
+                 for p in self.players.values() if p.connected and p.conn and not p.conn.closed]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def apply_result(self, res):
         for seat, d in res.get("hpDelta", {}).items():

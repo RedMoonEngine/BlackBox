@@ -165,6 +165,9 @@ class Hub:
             room.slot_spin(player)
         elif t == "use":
             room.use_inventory(player, msg.get("uid"), msg.get("target"))
+        elif t == "use_relic":
+            if msg.get("id") == "tarot":
+                room.use_tarot(player)
         elif t == "buy":
             room.market_buy(player, msg.get("id"))
             await room.broadcast()

@@ -60,6 +60,7 @@ export class Net {
   roulettePull() { this.send({ t: "action", kind: "pull" }); }
   rouletteStop() { this.send({ t: "action", kind: "stop" }); }
   useObject(uid, target) { this.send({ t: "use", uid, target }); }
+  useRelic(id) { this.send({ t: "use_relic", id }); }
   buy(id) { this.send({ t: "buy", id }); }
   bid(amount) { this.send({ t: "bid", amount }); }
   again() { this.send({ t: "again" }); }

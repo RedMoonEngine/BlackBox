@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>hero</title>
+<link rel="stylesheet" href="/css/style.css" />
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.js" } }</script>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="crt" class="crt"></div>
+  <div id="vignette" class="vignette"></div>
+  <div id="lobby" class="screen hidden"><div class="lobby-card"><h1 class="logo">X</h1></div></div>
+  <div id="hud">
+    <div id="topbar"></div>
+    <div id="phase-banner" class="phase-banner"></div>
+    <div id="action-panel" class="action-panel hidden">
+      <div id="held-info" class="held-info"></div>
+      <div id="timer-wrap"><div id="timer-bar"></div><span id="timer-num"></span></div>
+      <div id="action-btns" class="action-btns"></div>
+      <div id="push-picker" class="push-picker hidden"></div>
+    </div>
+    <div id="spectate" class="spectate hidden"></div>
+    <div id="log" class="log"></div>
+    <div id="hints" class="hints"></div>
+  </div>
+  <div id="reveal" class="reveal hidden"><div class="reveal-card"><div class="reveal-emoji"></div><div class="reveal-name"></div><div class="reveal-text"></div></div></div>
+  <div id="phone" class="phone hidden"><div class="phone-card"><div class="phone-emoji"></div><div id="phone-status"></div><div id="phone-line"></div><div id="phone-btns"><button id="btn-answer"></button><button id="btn-ignore"></button></div></div></div>
+  <div id="shop" class="shop hidden"><div class="shop-card"><div id="shop-grid"></div><button id="btn-ready"></button></div></div>
+  <div id="gameover" class="gameover hidden"><div class="go-card"><h1 id="go-title"></h1><p id="go-sub"></p><button id="btn-again"></button><p id="go-wait"></p></div></div>
+  <div class="hidden"><input id="in-name"><input id="in-room"><button id="btn-join"></button><p id="lobby-err"></p>
+    <div id="lobby-join"></div><div id="lobby-room"></div><b id="room-code"></b><ul id="seat-list"></ul>
+    <button id="btn-start"></button><p id="wait-host"></p><div id="bot-controls"></div>
+    <button id="btn-addbot"></button><button id="btn-rmbot"></button></div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { UI } from "/js/ui.js";
+    import { SceneManager } from "/js/scene.js";
+    const noop = () => Promise.resolve();
+    const net = new Proxy({}, { get: () => noop });
+    const audio = new Proxy({}, { get: () => noop });
+    const scene = new SceneManager(document.getElementById("gl"));
+    const ui = new UI(net, audio);
+    ui.joined = true; ui.mySeat = 0;
+    const seats = [
+      { seat: 0, name: "VOS", alive: true, hp: 2, chips: 12, invCount: 1, connected: true, ready: false, bet: null, relics: ["👁","🃏"], relicIds: ["ojo","tarot"], hasDoll: false, isHolder: false },
+      { seat: 1, name: "NORA", alive: true, hp: 3, chips: 7, invCount: 1, connected: true, ready: false, bet: null, relics: [], relicIds: [], hasDoll: false, isHolder: true },
+      { seat: 2, name: "TITO", alive: true, hp: 1, chips: 3, invCount: 0, connected: true, ready: false, bet: null, relics: [], relicIds: [], hasDoll: false, isHolder: false },
+    ];
+    const state = {
+      t: "state", code: "K7QX", phase: "OBJETOS", round: 5, roundCap: 16, menace: 4, pot: 18, betCap: 6,
+      tarot: { remaining: ["death","fool","emperor","moon","devil","star","star"] },
+      betTimerMs: null, hostSeat: 0, started: true, activity: "OBJETOS", winnerSeat: null,
+      seats,
+      current: { holderSeat: 1, face: { type: "?", emoji: "❔", name: "Objeto sin abrir" }, blind: true, pushesLeft: 2, timerMs: 60000, itemsLeft: 3 },
+      slots: null, roulette: null, event: null, market: null,
+      log: ["Ya salió THE SUN...", "Todavía falta THE DEVIL."],
+      you: {
+        seat: 0, name: "VOS", hp: 2, chips: 12, alive: true, ready: false, bet: 0, whisky: 0, isHost: true,
+        relics: [{ id: "ojo", emoji: "👁", name: "Ojo del Vidente", desc: "ves todo" },
+                 { id: "tarot", emoji: "🃏", name: "Cartas del Tarot", desc: "robá una carta del mazo compartido" }],
+        inventory: [{ uid: "a1", type: "whisky", emoji: "🥃", name: "Whisky", use: true, target: "self", desc: "reroll" }],
+        hints: ["No usen el Tarot: quedan THE DEVIL y THE FOOL."],
+        canAct: false, rouletteTurn: false, canSpin: false, myReels: null, tarotUsable: true,
+      },
+    };
+    ui.update(state);
+    scene.update(state);
+    if (location.hash.includes("tarot")) {
+      const card = location.hash.includes("devil")
+        ? { id:"devil", emoji:"😈", name:"THE DEVIL", quote:"Todo tiene un precio.", effect:"Recompensa enorme… y una Maldición permanente.", tone:"bad", img:"TheDevil" }
+        : { id:"sun", emoji:"☀️", name:"THE SUN", quote:"Incluso en el infierno existe la luz.", effect:"Recuperás toda la vida y ganás fichas.", tone:"good", img:"TheSun" };
+      ui.tarot([card]);
+      setTimeout(() => { clearTimeout(ui._tarotT); }, 120); // freeze para la captura
+    }
+    function frame() { scene.render(); ui.tickTimer(); requestAnimationFrame(frame); }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

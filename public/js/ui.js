@@ -4,6 +4,20 @@ import { svg, iconEmoji, ACT_ICON, clean } from "./icons.js";
 const $ = (id) => document.getElementById(id);
 const ACTNAME = { OBJETOS: "OBJETOS", SLOTS: "TRAGAPERRAS", ROULETTE: "RULETA RUSA",
   EVENT: "EVENTO", MARKET: "MERCADO" };
+// Cartas del Tarot: id -> emoji/nombre/imagen (PNG en /assets/Reliquias/Tarot/)
+const TAROT_META = {
+  sun: { emoji: "☀️", name: "THE SUN", img: "TheSun" },
+  death: { emoji: "💀", name: "THE DEATH", img: "TheDeath" },
+  fool: { emoji: "🤡", name: "THE FOOL", img: "TheFool" },
+  wheel: { emoji: "🎡", name: "WHEEL OF FORTUNE", img: "WheelOfFortune" },
+  hermit: { emoji: "🧙", name: "THE HERMIT", img: "TheHermit" },
+  emperor: { emoji: "👑", name: "THE EMPEROR", img: "TheEmperor" },
+  moon: { emoji: "🌙", name: "THE MOON", img: "TheMoon" },
+  devil: { emoji: "😈", name: "THE DEVIL", img: "TheDevil" },
+  star: { emoji: "⭐", name: "THE STAR", img: "TheStar" },
+};
+// orden para mostrar el mazo (buenas → malas)
+const TAROT_ORDER = ["sun", "star", "emperor", "hermit", "wheel", "fool", "moon", "death", "devil"];
 const actLabel = (a) => a ? `${svg(ACT_ICON[a] || "question")} ${ACTNAME[a] || a}` : "—";
 const chip = (n) => `${svg("chip")} <b>${n}</b>`;
 
@@ -38,8 +52,9 @@ export class UI {
     this.eventPanel = el("div", "event-banner-c hidden");
     this.invbar = el("div", "invbar hidden");
     this.relicbar = el("div", "relicbar hidden");
+    this.tarotbar = el("div", "tarotbar hidden");   // mazo compartido (qué queda)
     hud.append(this.betPanel, this.slotsPanel, this.roulettePanel, this.marketPanel,
-      this.eventPanel, this.invbar, this.relicbar);
+      this.eventPanel, this.invbar, this.relicbar, this.tarotbar);
     // overlays
     this.casinoOv = el("div", "casino-ov hidden",
       `<div>${svg("eye")} EL CASINO TE OBSERVA ${svg("eye")}</div>`);
@@ -51,9 +66,11 @@ export class UI {
     this.scareEl = el("div", "jumpscare hidden",
       `<div class="scare-inner"><div class="scare-face">🪆</div>
         <div class="scare-title">¡LA MUÑECA!</div><div class="scare-by"></div></div>`);
+    this.tarotOv = el("div", "tarot-ov hidden");    // cinemática de la carta revelada
+    this.tarotQueue = []; this.tarotBusy = false;
     this.tutOv = el("div", "tut-ov hidden", this._tutorialHTML());
     document.body.append(this.casinoOv, this.ownerOv, this.targetOv, this.fxBloodEl, this.fxFlashEl,
-      this.scareEl, this.tutOv);
+      this.scareEl, this.tarotOv, this.tutOv);
     this.tutOv.addEventListener("click", (e) => {
       if (e.target === this.tutOv || e.target.id === "tut-close") this.tutOv.classList.add("hidden");
     });
@@ -194,14 +211,14 @@ export class UI {
       ${row("whisky", "Inventario", "Objetos que <b>usás cuando querés</b> (bomba, whisky, imán, jeringa…). <b>Tocá un objeto</b> para usarlo; algunos piden objetivo.")}
       ${row("eye", "Reliquias", "Pasivas <b>permanentes</b> que cambian las reglas a tu favor.")}
 
-      <p class="tut-warn">${svg("warning")} El <b>teléfono</b> puede mentir. La caja <b>aprende</b>: cuanto más agresivos juegan todos, peor se pone. 🪆 Ojo con la <b>Muñeca Maldita</b>: se sienta al lado de su dueño, vigila el turno de cada uno y a veces te pega un <b>susto</b> y te <b>roba una reliquia</b>. La gracia no es la puntería: es <b>leer, mentir y arriesgar</b>.</p>
+      <p class="tut-warn">${svg("warning")} El <b>teléfono</b> puede mentir. La caja <b>aprende</b>: cuanto más agresivos juegan todos, peor se pone. 🪆 Ojo con la <b>Muñeca Maldita</b>: vigila y a veces te pega un <b>susto</b> y te roba una reliquia. 🃏 Las <b>Cartas del Tarot</b> son una reliquia que <b>tocás para robar</b> de un mazo <b>compartido y finito</b> (cuando salió una carta, ya no vuelve): mirá arriba a la derecha qué queda… ⭐ THE STAR roba otra carta y puede <b>encadenar</b>. La gracia no es la puntería: es <b>leer, mentir y arriesgar</b>.</p>
       <button class="big" id="tut-close">ENTENDIDO</button>
     </div>`;
   }
 
   _hideAll() {
     for (const e of [this.betPanel, this.slotsPanel, this.roulettePanel, this.eventPanel,
-      this.invbar, this.relicbar, this.casinoOv, this.ownerOv,
+      this.invbar, this.relicbar, this.tarotbar, this.casinoOv, this.ownerOv,
       $("phase-banner"), $("action-panel"), $("spectate"), $("shop"), $("gameover")])
       e && e.classList.add("hidden");
   }
@@ -266,10 +283,66 @@ export class UI {
     this._show(this.relicbar, r.length > 0);
     this.relicbar.innerHTML = "";
     for (const rel of r) {
-      const s = el("span", "relic-item", iconEmoji(rel.emoji) || "?");
-      s.title = `${rel.name} — ${rel.desc}`;
-      this.relicbar.appendChild(s);
+      if (rel.id === "tarot") {
+        // reliquia ACTIVA: se toca para robar una carta
+        const usable = !!state.you.tarotUsable;
+        const b = el("button", "relic-item tarot-relic" + (usable ? " usable" : ""), iconEmoji(rel.emoji) || "🃏");
+        b.title = `${rel.name} — ${rel.desc}` + (usable ? "\n▸ TOCÁ para robar una carta" : "\n(ya la usaste esta ronda o el mazo está vacío)");
+        b.disabled = !usable;
+        b.onclick = () => { this.audio.sfx("weird"); this.net.useRelic("tarot"); };
+        this.relicbar.appendChild(b);
+      } else {
+        const s = el("span", "relic-item", iconEmoji(rel.emoji) || "?");
+        s.title = `${rel.name} — ${rel.desc}`;
+        this.relicbar.appendChild(s);
+      }
     }
+    this._renderTarotDeck(state);
+  }
+
+  // Mazo del Tarot COMPARTIDO: se ve qué cartas quedan (la tensión del juego).
+  _renderTarotDeck(state) {
+    const t = state.tarot;
+    const show = !!(t && t.remaining && state.phase !== "LOBBY");
+    this._show(this.tarotbar, show);
+    if (!show) return;
+    const counts = {};
+    for (const id of t.remaining) counts[id] = (counts[id] || 0) + 1;
+    const icons = TAROT_ORDER.filter((id) => counts[id]).map((id) =>
+      `<span class="td-card" title="${TAROT_META[id].name}">${TAROT_META[id].emoji}${counts[id] > 1 ? "×" + counts[id] : ""}</span>`).join("");
+    this.tarotbar.innerHTML = `<span class="td-lbl">🃏 MAZO</span>${icons || '<span class="hint">vacío</span>'}`;
+  }
+
+  // Cinemática: la carta vuela, gira y se revela. Las cadenas de THE STAR se
+  // muestran una atrás de otra.
+  tarot(cards) {
+    for (const c of cards) this.tarotQueue.push(c);
+    this._pumpTarot();
+  }
+  _pumpTarot() {
+    if (this.tarotBusy || !this.tarotQueue.length) return;
+    this.tarotBusy = true;
+    const c = this.tarotQueue.shift();
+    const ov = this.tarotOv;
+    const url = c.img ? `/assets/Reliquias/Tarot/${c.img}.png` : "";
+    ov.className = "tarot-ov " + (c.tone || "weird");
+    ov.innerHTML =
+      `<div class="tarot-stage">
+        ${url ? `<img class="tarot-img" src="${url}" alt="">`
+              : `<div class="tarot-img tarot-noimg">${c.emoji || "🃏"}</div>`}
+        <div class="tarot-name">${c.emoji || ""} ${clean(c.name || "")}</div>
+        <div class="tarot-quote">“${clean(c.quote || "")}”</div>
+        <div class="tarot-effect">${clean(c.effect || "")}</div>
+       </div>`;
+    ov.classList.remove("hidden");
+    requestAnimationFrame(() => ov.classList.add("show"));
+    this.audio.sfx(c.tone === "bad" ? "bad" : c.tone === "good" ? "good" : "weird");
+    const hold = c.id === "star" ? 1500 : 2700;   // STAR encadena rápido
+    clearTimeout(this._tarotT);
+    this._tarotT = setTimeout(() => {
+      ov.classList.remove("show");
+      setTimeout(() => { ov.classList.add("hidden"); this.tarotBusy = false; this._pumpTarot(); }, 280);
+    }, hold);
   }
 
   _renderLog(state) {
